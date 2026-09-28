@@ -23,23 +23,29 @@ export const CaptionOverlay = memo(function CaptionOverlay({ phrases, style, tim
   const k = scale ?? width / 1080;
   const c = style.container;
 
+  const padX = c.type === 'none' ? 0 : c.padX * k;
+  const padY = c.type === 'none' ? 0 : c.padY * k;
+
   return (
     <View pointerEvents="none" style={[StyleSheet.absoluteFill, { overflow: 'hidden' }]}>
-      <View style={[s.anchor, { top: style.y * height }]}>
+      {/* A full-height band centred on the caption's y line; the block is centred inside it. */}
+      <View style={[s.band, { top: style.y * height - height, height: height * 2 }]}>
         <View
           style={{
             maxWidth: style.maxWidth * width,
-            flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'center',
-            paddingHorizontal: c.type === 'none' ? 0 : c.padX * k,
-            paddingVertical: c.type === 'none' ? 0 : c.padY * k,
+            paddingHorizontal: padX,
+            paddingVertical: padY,
             opacity: f.container.opacity,
             transform: [{ scale: f.container.scale }],
           }}
         >
+          {/* Background is a sibling of the word row, never part of its wrapping layout. */}
           {c.type !== 'none' && <ContainerBackground style={style} k={k} />}
-          {f.words.map((w) => (
-            <CaptionWord key={`${f.phrase.id}-${w.index}`} w={w} style={style} k={k} />
-          ))}
+          <View style={s.words}>
+            {f.words.map((w) => (
+              <CaptionWord key={`${f.phrase.id}-${w.index}`} w={w} style={style} k={k} />
+            ))}
+          </View>
         </View>
       </View>
     </View>
@@ -130,7 +136,7 @@ function CaptionWord({ w, style, k }: { w: WordFrame; style: CaptionStyle; k: nu
 }
 
 const s = StyleSheet.create({
-  // Zero-height row centred on the caption's y line; the block grows equally up and down.
-  anchor: { position: 'absolute', left: 0, right: 0, height: 0, alignItems: 'center', justifyContent: 'center' },
+  band: { position: 'absolute', left: 0, right: 0, alignItems: 'center', justifyContent: 'center' },
+  words: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'center', zIndex: 1 },
   strokeCopy: { position: 'absolute' },
 });
