@@ -149,14 +149,18 @@
           "iosUrlScheme": "com.googleusercontent.apps.682449897788-jmtli8omau2fs3er8kqhaea7phqqkedn"
         }
       ],
-      "expo-apple-authentication"
+      "expo-apple-authentication",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 160,
+          "resizeMode": "contain",
+          "backgroundColor": "#0B0B0F"
+        }
+      ]
     ],
     "backgroundColor": "#0B0B0F",
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#0B0B0F"
-    },
     "extra": {
       "eas": {
         "projectId": "b3d87834-abfd-4665-8117-f858d8071195"

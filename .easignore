@@ -1,0 +1,7 @@
+# EAS upload rules (used instead of .gitignore). Unlike git, the licensed Gilroy fonts ARE uploaded
+# so the app bundle can include them; they stay out of the public repository.
+.DS_Store
+**/node_modules/
+**/.env
+backend/
+.git/
