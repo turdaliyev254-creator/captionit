@@ -16,10 +16,32 @@ async function transcribe(audioFile, language) {
   return result;
 }
 
+const CYR_TO_LAT = {
+  а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', е: 'e', ё: 'yo', ж: 'j', з: 'z', и: 'i', й: 'y',
+  к: 'k', л: 'l', м: 'm', н: 'n', о: 'o', п: 'p', р: 'r', с: 's', т: 't', у: 'u', ф: 'f',
+  х: 'x', ц: 's', ч: 'ch', ш: 'sh', щ: 'sh', ъ: '’', ы: 'i', ь: '', э: 'e', ю: 'yu', я: 'ya',
+  ў: 'o‘', қ: 'q', ғ: 'g‘', ҳ: 'h',
+};
+
+// Scribe sometimes emits loanwords in Cyrillic ("гепатит") inside Latin Uzbek text.
+function cyrillicToLatin(text) {
+  return text.replace(/[Ѐ-ӿ]+/g, (word) =>
+    [...word]
+      .map((ch, i) => {
+        const lower = ch.toLowerCase();
+        // "е" at the start of a word sounds like "ye" (e.g. "ер" -> "yer").
+        let lat = lower === 'е' && i === 0 ? 'ye' : CYR_TO_LAT[lower] ?? ch;
+        if (ch !== lower && lat) lat = lat[0].toUpperCase() + lat.slice(1);
+        return lat;
+      })
+      .join(''),
+  );
+}
+
 // Official Uzbek Latin: o‘ / g‘ use a turned comma (‘), the glottal stop (tutuq belgisi) uses ’.
 // STT models mix ', `, ’ and ʻ, so normalize them.
 function fixUzbekLatin(text) {
-  return text
+  return cyrillicToLatin(text)
     .replace(/([oOgG])['`’ʻʼ‘]/g, '$1‘')
     .replace(/(\p{L})['`ʻʼ]/gu, '$1’');
 }
