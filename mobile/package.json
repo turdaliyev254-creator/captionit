@@ -17,6 +17,7 @@
     "@expo-google-fonts/unbounded": "^0.4.1",
     "@expo/vector-icons": "^15.0.2",
     "@react-native-community/slider": "5.2.0",
+    "@react-native-google-signin/google-signin": "^16.1.5",
     "@react-native-masked-view/masked-view": "0.3.2",
     "expo": "~57.0.25",
     "expo-apple-authentication": "~57.0.2",

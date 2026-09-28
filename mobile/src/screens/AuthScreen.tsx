@@ -3,7 +3,8 @@ import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, St
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { signInApple, startOtp, User, verifyOtp } from '../api';
+import { signInApple, signInGoogle, startOtp, User, verifyOtp } from '../api';
+import { googleAvailable, googleIdToken } from '../googleAuth';
 import { openPrivacy, openTerms } from '../links';
 import { colors } from '../theme';
 import { BRAND_GRADIENT, GlassCard, GradientButton, GradientText } from '../ui/Gradient';
@@ -63,6 +64,20 @@ export function AuthScreen({ onSignedIn }: Props) {
     } catch (e: any) {
       setCode('');
       Alert.alert('Xatolik', e?.message ?? String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function google() {
+    try {
+      const idToken = await googleIdToken();
+      if (!idToken) return; // cancelled
+      setBusy(true);
+      const s = await signInGoogle(idToken);
+      onSignedIn(s.token, s.user);
+    } catch (e: any) {
+      Alert.alert('Google orqali kirib bo‘lmadi', e?.message ?? String(e));
     } finally {
       setBusy(false);
     }
@@ -129,13 +144,21 @@ export function AuthScreen({ onSignedIn }: Props) {
             onPress={() => !busy && sendCode()}
           />
 
+          {(appleAvailable || googleAvailable()) && (
+            <View style={s.orRow}>
+              <View style={s.orLine} />
+              <Text style={s.orText}>yoki</Text>
+              <View style={s.orLine} />
+            </View>
+          )}
+          {googleAvailable() && (
+            <Pressable onPress={google} style={({ pressed }) => [s.googleBtn, pressed && { opacity: 0.85 }]}>
+              <Ionicons name="logo-google" size={20} color="#111" />
+              <Text style={s.googleText}>Google bilan davom etish</Text>
+            </Pressable>
+          )}
           {appleAvailable && (
             <>
-              <View style={s.orRow}>
-                <View style={s.orLine} />
-                <Text style={s.orText}>yoki</Text>
-                <View style={s.orLine} />
-              </View>
               <AppleAuthentication.AppleAuthenticationButton
                 buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
                 buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.WHITE}
@@ -211,7 +234,11 @@ const s = StyleSheet.create({
   orRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginVertical: 20 },
   orLine: { flex: 1, height: 1, backgroundColor: 'rgba(255,255,255,0.15)' },
   orText: { color: colors.muted, fontWeight: '600' },
-  appleBtn: { height: 56, width: '100%' },
+  appleBtn: { height: 56, width: '100%', marginTop: 12 },
+  googleBtn: {
+    height: 56, borderRadius: 18, backgroundColor: '#fff', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10,
+  },
+  googleText: { color: '#111', fontSize: 17, fontWeight: '600' },
   codeActions: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 18 },
   link: { color: colors.accent, fontWeight: '700' },
   legal: { color: colors.muted, fontSize: 12, lineHeight: 18, textAlign: 'center' },
