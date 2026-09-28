@@ -1,0 +1,46 @@
+{
+  "expo": {
+    "name": "Captionit",
+    "slug": "captionit",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.captionit.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "package": "com.captionit.app"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-video",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Subtitr qo‘shish uchun videolaringizni tanlash imkonini beradi.",
+          "cameraPermission": "Video yozib olish uchun kamera kerak.",
+          "microphonePermission": "Video bilan ovoz yozish uchun mikrofon kerak."
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "savePhotosPermission": "Tayyor videoni galereyaga saqlash uchun ruxsat kerak.",
+          "isAccessMediaLocationEnabled": false
+        }
+      ]
+    ],
+    "backgroundColor": "#0B0B0F"
+  }
+}
