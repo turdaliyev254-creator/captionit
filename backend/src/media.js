@@ -33,4 +33,9 @@ function extractAudio(input, output) {
   return run(ffmpegPath, ['-y', '-i', input, '-vn', '-ac', '1', '-ar', '16000', '-b:a', '48k', output]);
 }
 
-module.exports = { probe, extractAudio };
+// Small cover image for the profile's video list.
+function makeThumbnail(video, output) {
+  return run(ffmpegPath, ['-y', '-ss', '1', '-i', video, '-frames:v', '1', '-vf', 'scale=360:-2', '-q:v', '4', output]);
+}
+
+module.exports = { probe, extractAudio, makeThumbnail };

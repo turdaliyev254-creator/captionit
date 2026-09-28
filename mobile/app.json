@@ -41,7 +41,10 @@
         }
       ],
       "expo-font",
-      "expo-image"
+      "expo-image",
+      "expo-sharing",
+      "expo-secure-store",
+      "expo-web-browser"
     ],
     "backgroundColor": "#0B0B0F"
   }

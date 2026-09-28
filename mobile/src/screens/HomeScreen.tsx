@@ -4,6 +4,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import type { Phrase } from '../../../shared/captions';
+import type { User } from '../api';
 import { getStyle } from '../../../shared/styles';
 import { CaptionOverlay } from '../captions/CaptionOverlay';
 import { useLoopClock } from '../captions/usePlayerTime';
@@ -37,7 +38,9 @@ const DEMO: Phrase[] = [
 const DEMO_STYLE = { ...getStyle('glass-pop'), y: 0.56, maxWidth: 0.8 };
 const CARD_H = 190;
 
-export function HomeScreen({ onPicked }: { onPicked: (video: PickedVideo, language: string) => void }) {
+type Props = { user: User; onPicked: (video: PickedVideo, language: string) => void; onProfile: () => void };
+
+export function HomeScreen({ user, onPicked, onProfile }: Props) {
   const [language, setLanguage] = useState('uz');
   const [cardW, setCardW] = useState(0);
   const time = useLoopClock(3.4);
@@ -69,6 +72,12 @@ export function HomeScreen({ onPicked }: { onPicked: (video: PickedVideo, langua
           <Ionicons name="text" size={18} color="#fff" />
         </LinearGradient>
         <Text style={s.brand}>Captionit</Text>
+        <View style={{ flex: 1 }} />
+        <Pressable onPress={onProfile} hitSlop={8} style={s.avatarBtn}>
+          <LinearGradient colors={BRAND_GRADIENT} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.avatar}>
+            <Text style={s.avatarText}>{(user.name || 'U').slice(0, 1).toUpperCase()}</Text>
+          </LinearGradient>
+        </Pressable>
       </View>
 
       <View style={s.hero}>
@@ -130,6 +139,9 @@ const s = StyleSheet.create({
   brandRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   logo: { width: 34, height: 34, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
   brand: { color: '#fff', fontFamily: 'Outfit_800ExtraBold', fontSize: 20, letterSpacing: 0.3 },
+  avatarBtn: { borderRadius: 20, borderWidth: 2, borderColor: 'rgba(255,255,255,0.35)' },
+  avatar: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  avatarText: { color: '#fff', fontFamily: 'Outfit_800ExtraBold', fontSize: 16 },
   hero: { marginTop: 26, marginBottom: 22 },
   title: { color: '#fff', fontFamily: 'Outfit_800ExtraBold', fontSize: 44, lineHeight: 50, letterSpacing: -0.5 },
   subtitle: { color: 'rgba(255,255,255,0.72)', fontSize: 16, lineHeight: 23, marginTop: 12 },

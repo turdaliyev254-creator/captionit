@@ -5,14 +5,23 @@ const crypto = require('crypto');
 const express = require('express');
 const multer = require('multer');
 const cors = require('cors');
-const { probe, extractAudio } = require('./media');
+const { probe, extractAudio, makeThumbnail } = require('./media');
 const { transcribe } = require('./transcribe');
 const heicConvert = require('heic-convert');
 const { renderCaptioned, getBundle } = require('./render');
+const { openDb } = require('./db');
+const { createAuth, HttpError } = require('./auth');
+const { mountLegal } = require('./legal');
 
 const PORT = Number(process.env.PORT || 4000);
 const DATA_DIR = path.resolve(process.env.DATA_DIR || path.join(__dirname, '..', 'data'));
 fs.mkdirSync(DATA_DIR, { recursive: true });
+
+const db = openDb(DATA_DIR);
+const auth = createAuth({ db, dataDir: DATA_DIR });
+
+// The renderer (headless Chrome on this machine) fetches media with this per-process key.
+const INTERNAL_KEY = crypto.randomBytes(24).toString('hex');
 
 // Jobs live in memory and are mirrored to data/<id>/job.json so a server restart keeps them.
 const jobs = new Map();
@@ -26,6 +35,10 @@ for (const id of fs.readdirSync(DATA_DIR)) {
 }
 function save(job) {
   fs.writeFileSync(path.join(job.dir, 'job.json'), JSON.stringify(job));
+}
+function removeJob(job) {
+  jobs.delete(job.id);
+  fs.rmSync(job.dir, { recursive: true, force: true });
 }
 
 const upload = multer({
@@ -46,9 +59,7 @@ const upload = multer({
 const assetUpload = multer({
   storage: multer.diskStorage({
     destination: (req, file, cb) => {
-      const job = jobs.get(req.params.id);
-      if (!job) return cb(Object.assign(new Error('job not found'), { status: 404 }));
-      const dir = path.join(job.dir, 'assets');
+      const dir = path.join(req.job.dir, 'assets');
       fs.mkdirSync(dir, { recursive: true });
       cb(null, dir);
     },
@@ -60,20 +71,96 @@ const assetUpload = multer({
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
+mountLegal(app);
+
+// async route helper: forwards rejections to the error handler.
+const h = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
 function publicJob(job) {
-  const { input, dir, ...rest } = job;
+  const { input, dir, userId, ...rest } = job;
   return rest;
+}
+
+// Loads :id and makes sure it belongs to the signed-in user (404 otherwise, so ids don't leak).
+function ownJob(req, res, next) {
+  const job = jobs.get(req.params.id);
+  if (!job || job.userId !== req.user.id) return next(new HttpError(404, 'Video topilmadi', 'not_found'));
+  req.job = job;
+  next();
+}
+
+// Media files: the owner (token in header or ?token=) or the local renderer (?k=).
+function mediaAccess(req, res, next) {
+  if (req.query.k === INTERNAL_KEY) {
+    req.job = jobs.get(req.params.id);
+    return req.job ? next() : next(new HttpError(404, 'Video topilmadi'));
+  }
+  auth.requireUser(req, res, (err) => (err ? next(err) : ownJob(req, res, next)));
 }
 
 app.get('/health', (req, res) => res.json({ ok: true }));
 
+// ---------- auth ----------
+
+app.post('/auth/otp/start', h(async (req, res) => res.json(await auth.startOtp(req.body?.phone))));
+app.post('/auth/otp/verify', h(async (req, res) => res.json(await auth.verifyOtp(req.body?.phone, req.body?.code, req.body?.name))));
+app.post('/auth/google', h(async (req, res) => res.json(await auth.signInGoogle(req.body?.idToken))));
+app.post('/auth/apple', h(async (req, res) => res.json(await auth.signInApple(req.body?.identityToken, req.body?.fullName))));
+
+app.get('/me', auth.requireUser, (req, res) => {
+  const videos = [...jobs.values()].filter((j) => j.userId === req.user.id && j.status === 'done').length;
+  res.json({ user: auth.publicUser(req.user), videos });
+});
+
+app.patch('/me', auth.requireUser, (req, res) => {
+  if (typeof req.body?.name === 'string') auth.updateName(req.user.id, req.body.name.slice(0, 60));
+  res.json({ user: auth.publicUser(auth.getUser(req.user.id)) });
+});
+
+// Explicit permission to send audio to the third-party AI (App Store guideline 5.1.2(i)).
+app.post('/me/consent', auth.requireUser, (req, res) => {
+  auth.giveConsent(req.user.id);
+  res.json({ user: auth.publicUser(auth.getUser(req.user.id)) });
+});
+
+// In-app account deletion (App Store guideline 5.1.1(v)): user row and all their files.
+app.delete('/me', auth.requireUser, (req, res) => {
+  for (const job of [...jobs.values()]) if (job.userId === req.user.id) removeJob(job);
+  auth.deleteUser(req.user.id);
+  res.json({ ok: true });
+});
+
+app.get('/me/videos', auth.requireUser, (req, res) => {
+  const list = [...jobs.values()]
+    .filter((j) => j.userId === req.user.id && j.status === 'done')
+    .sort((a, b) => (b.renderedAt ?? b.createdAt) - (a.renderedAt ?? a.createdAt))
+    .map((j) => ({
+      id: j.id,
+      title: j.title || 'Video',
+      duration: j.outputDuration ?? j.duration,
+      createdAt: j.renderedAt ?? j.createdAt,
+      width: j.width,
+      height: j.height,
+      videoUrl: `/jobs/${j.id}/video`,
+      thumbUrl: `/jobs/${j.id}/thumb`,
+    }));
+  res.json({ videos: list });
+});
+
+// ---------- jobs ----------
+
+function requireConsent(req, res, next) {
+  if (!req.user.ai_consent_at) return next(new HttpError(403, 'Avval audio yuborishga rozilik bering.', 'consent_required'));
+  next();
+}
+
 // 1) Upload a video -> starts transcription.
-app.post('/jobs', upload.single('video'), async (req, res) => {
+app.post('/jobs', auth.requireUser, requireConsent, upload.single('video'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'video file is required (field "video")' });
   const id = req.jobId;
   const job = {
     id,
+    userId: req.user.id,
     status: 'transcribing',
     language: req.body.language || 'auto',
     dir: path.dirname(req.file.path),
@@ -83,6 +170,7 @@ app.post('/jobs', upload.single('video'), async (req, res) => {
     createdAt: Date.now(),
   };
   jobs.set(id, job);
+  save(job);
   res.status(201).json(publicJob(job));
 
   try {
@@ -90,7 +178,8 @@ app.post('/jobs', upload.single('video'), async (req, res) => {
     const audio = path.join(job.dir, 'audio.mp3');
     await extractAudio(job.input, audio);
     const result = await transcribe(audio, job.language);
-    Object.assign(job, { status: 'transcribed', text: result.text, detectedLanguage: result.language, words: result.words });
+    const title = result.words.slice(0, 6).map((w) => w.word).join(' ');
+    Object.assign(job, { status: 'transcribed', text: result.text, title, detectedLanguage: result.language, words: result.words });
   } catch (err) {
     console.error(`[${id}] transcription failed`, err);
     Object.assign(job, { status: 'error', error: err.message.split('\n')[0] });
@@ -98,18 +187,15 @@ app.post('/jobs', upload.single('video'), async (req, res) => {
   save(job);
 });
 
-app.get('/jobs/:id', (req, res) => {
-  const job = jobs.get(req.params.id);
-  if (!job) return res.status(404).json({ error: 'job not found' });
-  res.json(publicJob(job));
+app.get('/jobs/:id', auth.requireUser, ownJob, (req, res) => res.json(publicJob(req.job)));
+
+app.delete('/jobs/:id', auth.requireUser, ownJob, (req, res) => {
+  removeJob(req.job);
+  res.json({ ok: true });
 });
 
-// Source video, read by the Remotion renderer.
-app.get('/jobs/:id/input', (req, res) => {
-  const job = jobs.get(req.params.id);
-  if (!job) return res.status(404).json({ error: 'job not found' });
-  res.sendFile(job.input);
-});
+// Source video, read by the renderer and by the app when re-opening a project.
+app.get('/jobs/:id/input', mediaAccess, (req, res) => res.sendFile(req.job.input));
 
 async function toJpeg(file) {
   const jpg = file.replace(/\.hei[cf]$/i, '.jpg');
@@ -128,33 +214,27 @@ async function ensureDrawable(job, src) {
   return src.replace(/[^/]+$/, path.basename(await toJpeg(file)));
 }
 
-app.post('/jobs/:id/assets', assetUpload.single('file'), async (req, res, next) => {
+app.post('/jobs/:id/assets', auth.requireUser, ownJob, assetUpload.single('file'), h(async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'file is required (field "file")' });
-  try {
-    let name = req.file.filename;
-    // iPhone photos may arrive as HEIC, which the export renderer (Chrome) can't draw.
-    if (/\.hei[cf]$/i.test(name)) {
-      name = path.basename(await toJpeg(req.file.path));
-      fs.rmSync(req.file.path);
-    }
-    res.status(201).json({ src: `/jobs/${req.params.id}/assets/${name}` });
-  } catch (err) {
-    next(err);
+  let name = req.file.filename;
+  // iPhone photos may arrive as HEIC, which the export renderer (Chrome) can't draw.
+  if (/\.hei[cf]$/i.test(name)) {
+    name = path.basename(await toJpeg(req.file.path));
+    fs.rmSync(req.file.path);
   }
-});
+  res.status(201).json({ src: `/jobs/${req.params.id}/assets/${name}` });
+}));
 
-app.get('/jobs/:id/assets/:file', (req, res) => {
-  const job = jobs.get(req.params.id);
-  const file = job && path.join(job.dir, 'assets', path.basename(req.params.file));
-  if (!file || !fs.existsSync(file)) return res.status(404).json({ error: 'asset not found' });
+app.get('/jobs/:id/assets/:file', mediaAccess, (req, res) => {
+  const file = path.join(req.job.dir, 'assets', path.basename(req.params.file));
+  if (!fs.existsSync(file)) return res.status(404).json({ error: 'asset not found' });
   res.sendFile(file);
 });
 
 // 2) Export: render the edited phrases with the chosen (already resolved) style.
 // Phrases and overlays arrive already shifted to the trimmed timeline (0 = trim.start).
-app.post('/jobs/:id/render', async (req, res) => {
-  const job = jobs.get(req.params.id);
-  if (!job) return res.status(404).json({ error: 'job not found' });
+app.post('/jobs/:id/render', auth.requireUser, ownJob, async (req, res) => {
+  const job = req.job;
   if (job.status === 'transcribing' || job.status === 'rendering' || !job.width) {
     return res.status(409).json({ error: `job is ${job.status}` });
   }
@@ -171,11 +251,12 @@ app.post('/jobs/:id/render', async (req, res) => {
 
   const output = path.join(job.dir, 'output.mp4');
   const started = Date.now();
+  const internal = (p) => `http://localhost:${PORT}${p}?k=${INTERNAL_KEY}`;
   try {
     await renderCaptioned({
       output,
       inputProps: {
-        videoSrc: `http://localhost:${PORT}/jobs/${job.id}/input`,
+        videoSrc: internal(`/jobs/${job.id}/input`),
         width: job.width,
         height: job.height,
         fps: job.fps,
@@ -183,12 +264,14 @@ app.post('/jobs/:id/render', async (req, res) => {
         trim,
         phrases,
         style,
-        // Asset paths become absolute URLs the renderer can fetch.
-        overlays: await Promise.all(overlays.map(async (o) => ({ ...o, src: o.src ? `http://localhost:${PORT}${await ensureDrawable(job, o.src)}` : undefined }))),
+        overlays: await Promise.all(overlays.map(async (o) => ({ ...o, src: o.src ? internal(await ensureDrawable(job, o.src)) : undefined }))),
       },
       onProgress: (p) => (job.progress = p),
     });
-    Object.assign(job, { status: 'done', progress: 1, videoUrl: `/jobs/${job.id}/video` });
+    await makeThumbnail(output, path.join(job.dir, 'thumb.jpg')).catch((err) => console.error(`[${job.id}] thumbnail failed`, err));
+    Object.assign(job, {
+      status: 'done', progress: 1, videoUrl: `/jobs/${job.id}/video`, renderedAt: Date.now(), outputDuration: trim.end - trim.start,
+    });
     console.log(`[${job.id}] rendered in ${((Date.now() - started) / 1000).toFixed(1)}s`);
   } catch (err) {
     console.error(`[${job.id}] render failed`, err);
@@ -197,21 +280,26 @@ app.post('/jobs/:id/render', async (req, res) => {
   save(job);
 });
 
-app.get('/jobs/:id/video', (req, res) => {
-  const job = jobs.get(req.params.id);
-  const file = job && path.join(job.dir, 'output.mp4');
-  if (!file || !fs.existsSync(file)) return res.status(404).json({ error: 'video not ready' });
+app.get('/jobs/:id/video', mediaAccess, (req, res) => {
+  const file = path.join(req.job.dir, 'output.mp4');
+  if (!fs.existsSync(file)) return res.status(404).json({ error: 'video not ready' });
+  res.sendFile(file);
+});
+
+app.get('/jobs/:id/thumb', mediaAccess, (req, res) => {
+  const file = path.join(req.job.dir, 'thumb.jpg');
+  if (!fs.existsSync(file)) return res.status(404).json({ error: 'no thumbnail' });
   res.sendFile(file);
 });
 
 // Always answer with JSON so the app can show a readable message.
 app.use((err, req, res, next) => {
-  if (req.jobId) fs.rmSync(path.join(DATA_DIR, req.jobId), { recursive: true, force: true });
+  if (req.jobId && !jobs.has(req.jobId)) fs.rmSync(path.join(DATA_DIR, req.jobId), { recursive: true, force: true });
   if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {
-    return res.status(413).json({ error: 'Video juda katta (maksimum 2 GB). Qisqaroq video tanlang.' });
+    return res.status(413).json({ error: 'Fayl juda katta. Qisqaroq video tanlang.' });
   }
-  console.error(err);
-  res.status(err.status || 500).json({ error: err.message || 'Server xatosi' });
+  if (!(err instanceof HttpError)) console.error(err);
+  res.status(err.status || 500).json({ error: err.message || 'Server xatosi', code: err.code });
 });
 
 app.listen(PORT, '0.0.0.0', () => {

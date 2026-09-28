@@ -1,17 +1,24 @@
-import { useState } from 'react';
-import { Alert, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, StyleSheet, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { buildPhrases, resolveStyle } from '../shared/captions';
 import { shiftForTrim, shiftPhrasesForTrim } from '../shared/overlays';
 import { getStyle } from '../shared/styles';
-import { API_URL, Job, renderJob, uploadVideo, waitForJob } from './src/api';
+import {
+  getMe, giveConsent, Job, loadToken, mediaUrl, renderJob, setToken, setUnauthorizedHandler, uploadVideo, User, VideoItem, waitForJob,
+} from './src/api';
 import { Button, Loading } from './src/components';
 import { useCaptionFonts } from './src/fonts';
+import { AuthScreen } from './src/screens/AuthScreen';
+import { ContactScreen } from './src/screens/ContactScreen';
 import { EditorScreen, EditorSession } from './src/screens/EditorScreen';
 import { HomeScreen, PickedVideo } from './src/screens/HomeScreen';
+import { ProfileScreen } from './src/screens/ProfileScreen';
 import { ResultScreen } from './src/screens/ResultScreen';
+import { VideoScreen } from './src/screens/VideoScreen';
 import { colors } from './src/theme';
+import { ConsentModal } from './src/ui/ConsentModal';
 import { GradientBackground } from './src/ui/GradientBackground';
 
 type Step =
@@ -21,16 +28,55 @@ type Step =
   | { name: 'editor' }
   | { name: 'rendering'; progress: number }
   | { name: 'result'; videoUrl: string }
+  | { name: 'profile' }
+  | { name: 'video'; video: VideoItem }
+  | { name: 'contact'; back: Step }
   | { name: 'error'; message: string; canReturn: boolean };
 
 export default function App() {
   const [fontsLoaded] = useCaptionFonts();
+  const [user, setUser] = useState<User | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
   const [step, setStep] = useState<Step>({ name: 'home' });
   const [video, setVideo] = useState<PickedVideo | null>(null);
   const [job, setJob] = useState<Job | null>(null);
   const [session, setSession] = useState<EditorSession | null>(null);
+  const [pendingPick, setPendingPick] = useState<{ picked: PickedVideo; language: string } | null>(null);
 
-  async function handlePicked(picked: PickedVideo, language: string) {
+  // Restore the saved session on launch.
+  useEffect(() => {
+    setUnauthorizedHandler(() => signOut());
+    (async () => {
+      try {
+        if (await loadToken()) setUser((await getMe()).user);
+      } catch {
+        await setToken(null);
+      } finally {
+        setAuthChecked(true);
+      }
+    })();
+  }, []);
+
+  async function signIn(token: string, u: User) {
+    await setToken(token);
+    setUser(u);
+    setStep({ name: 'home' });
+  }
+
+  async function signOut() {
+    await setToken(null);
+    setUser(null);
+    setJob(null);
+    setSession(null);
+    setStep({ name: 'home' });
+  }
+
+  async function handlePicked(picked: PickedVideo, language: string, consented = user?.aiConsent) {
+    // Ask once for permission to send audio to the AI transcription service.
+    if (!consented) {
+      setPendingPick({ picked, language });
+      return;
+    }
     setVideo(picked);
     setStep({ name: 'uploading', progress: 0 });
     try {
@@ -53,6 +99,17 @@ export default function App() {
     }
   }
 
+  async function acceptConsent() {
+    const pending = pendingPick;
+    setPendingPick(null);
+    try {
+      setUser((await giveConsent()).user);
+      if (pending) await handlePicked(pending.picked, pending.language, true);
+    } catch (e: any) {
+      Alert.alert('Xatolik', e?.message ?? String(e));
+    }
+  }
+
   async function handleExport() {
     if (!job || !session) return;
     if (session.overlays.some((o) => !o.src)) {
@@ -70,7 +127,7 @@ export default function App() {
         overlays: shiftForTrim(session.overlays, trim).map(({ uri, ...o }) => o),
       });
       const done = await waitForJob(job.id, 'rendering', (j) => setStep({ name: 'rendering', progress: j.progress ?? 0 }));
-      setStep({ name: 'result', videoUrl: `${API_URL}${done.videoUrl}?t=${Date.now()}` });
+      setStep({ name: 'result', videoUrl: mediaUrl(`${done.videoUrl}?t=${Date.now()}`) });
     } catch (e: any) {
       setStep({ name: 'error', message: e?.message ?? String(e), canReturn: true });
     }
@@ -82,38 +139,69 @@ export default function App() {
     setStep({ name: 'home' });
   };
 
-  if (!fontsLoaded) return <View style={styles.root} />;
+  const ready = fontsLoaded && authChecked;
+  const intensity = !user || step.name === 'home' ? 1 : step.name === 'editor' || step.name === 'result' || step.name === 'video' ? 0.35 : 0.6;
 
   return (
     <SafeAreaProvider>
       <View style={styles.root}>
-      {/* Gradient backdrop; dimmer in the editor/result so the video stays the focus. */}
-      <GradientBackground intensity={step.name === 'home' ? 1 : step.name === 'editor' || step.name === 'result' ? 0.35 : 0.6} />
-      <SafeAreaView style={styles.safe}>
-        <StatusBar style="light" />
-        {step.name === 'home' && <HomeScreen onPicked={handlePicked} />}
-        {step.name === 'uploading' && <Loading title="Video yuklanmoqda…" subtitle={`${Math.round(step.progress * 100)}%`} />}
-        {step.name === 'transcribing' && (
-          <Loading title="Nutq matnga aylantirilmoqda…" subtitle="Video uzunligiga qarab bir necha soniya ketadi" />
-        )}
-        {step.name === 'editor' && job && video && session && (
-          <EditorScreen job={job} videoUri={video.uri} session={session} setSession={setSession} onExport={handleExport} onBack={reset} />
-        )}
-        {step.name === 'rendering' && (
-          <Loading title="Video tayyorlanmoqda…" subtitle={`${Math.round(step.progress * 100)}%`} />
-        )}
-        {step.name === 'result' && (
-          <ResultScreen videoUrl={step.videoUrl} onEditAgain={() => setStep({ name: 'editor' })} onNew={reset} />
-        )}
-        {step.name === 'error' && (
-          <View style={styles.error}>
-            <Text style={styles.errorTitle}>Xatolik</Text>
-            <Text style={styles.errorText}>{step.message}</Text>
-            {step.canReturn && <Button title="Muharrirga qaytish" onPress={() => setStep({ name: 'editor' })} />}
-            <Button title="Bosh sahifa" variant="secondary" onPress={reset} />
-          </View>
-        )}
-      </SafeAreaView>
+        {/* Gradient backdrop; dimmer in the editor/result so the video stays the focus. */}
+        <GradientBackground intensity={intensity} />
+        <SafeAreaView style={styles.safe}>
+          <StatusBar style="light" />
+          {!ready && <ActivityIndicator color="#fff" style={{ flex: 1 }} />}
+          {ready && !user && <AuthScreen onSignedIn={signIn} />}
+          {ready && user && (
+            <>
+              {step.name === 'home' && <HomeScreen user={user} onPicked={(p, l) => handlePicked(p, l)} onProfile={() => setStep({ name: 'profile' })} />}
+              {step.name === 'uploading' && <Loading title="Video yuklanmoqda…" subtitle={`${Math.round(step.progress * 100)}%`} />}
+              {step.name === 'transcribing' && (
+                <Loading title="Nutq matnga aylantirilmoqda…" subtitle="Video uzunligiga qarab bir necha soniya ketadi" />
+              )}
+              {step.name === 'editor' && job && video && session && (
+                <EditorScreen job={job} videoUri={video.uri} session={session} setSession={setSession} onExport={handleExport} onBack={reset} />
+              )}
+              {step.name === 'rendering' && <Loading title="Video tayyorlanmoqda…" subtitle={`${Math.round(step.progress * 100)}%`} />}
+              {step.name === 'result' && (
+                <ResultScreen
+                  videoUrl={step.videoUrl}
+                  onEditAgain={() => setStep({ name: 'editor' })}
+                  onNew={reset}
+                  onProfile={() => setStep({ name: 'profile' })}
+                />
+              )}
+              {step.name === 'profile' && (
+                <ProfileScreen
+                  user={user}
+                  onBack={() => setStep({ name: 'home' })}
+                  onOpenVideo={(v) => setStep({ name: 'video', video: v })}
+                  onContact={() => setStep({ name: 'contact', back: { name: 'profile' } })}
+                  onUserChange={setUser}
+                  onSignOut={signOut}
+                  onNewVideo={reset}
+                />
+              )}
+              {step.name === 'video' && (
+                <VideoScreen
+                  video={step.video}
+                  onBack={() => setStep({ name: 'profile' })}
+                  onDeleted={() => setStep({ name: 'profile' })}
+                  onNew={reset}
+                />
+              )}
+              {step.name === 'contact' && <ContactScreen onBack={() => setStep(step.back)} />}
+              {step.name === 'error' && (
+                <View style={styles.error}>
+                  <Text style={styles.errorTitle}>Xatolik</Text>
+                  <Text style={styles.errorText}>{step.message}</Text>
+                  {step.canReturn && <Button title="Muharrirga qaytish" onPress={() => setStep({ name: 'editor' })} />}
+                  <Button title="Bosh sahifa" variant="secondary" onPress={reset} />
+                </View>
+              )}
+              <ConsentModal visible={!!pendingPick} onAccept={acceptConsent} onCancel={() => setPendingPick(null)} />
+            </>
+          )}
+        </SafeAreaView>
       </View>
     </SafeAreaProvider>
   );
