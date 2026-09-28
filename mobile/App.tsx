@@ -12,6 +12,7 @@ import { EditorScreen, EditorSession } from './src/screens/EditorScreen';
 import { HomeScreen, PickedVideo } from './src/screens/HomeScreen';
 import { ResultScreen } from './src/screens/ResultScreen';
 import { colors } from './src/theme';
+import { GradientBackground } from './src/ui/GradientBackground';
 
 type Step =
   | { name: 'home' }
@@ -85,7 +86,10 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <SafeAreaView style={styles.root}>
+      <View style={styles.root}>
+      {/* Bright gradient backdrop everywhere except the editor/result, where the video is the focus. */}
+      {step.name !== 'editor' && step.name !== 'result' && <GradientBackground intensity={step.name === 'home' ? 1 : 0.6} />}
+      <SafeAreaView style={styles.safe}>
         <StatusBar style="light" />
         {step.name === 'home' && <HomeScreen onPicked={handlePicked} />}
         {step.name === 'uploading' && <Loading title="Video yuklanmoqda…" subtitle={`${Math.round(step.progress * 100)}%`} />}
@@ -110,12 +114,14 @@ export default function App() {
           </View>
         )}
       </SafeAreaView>
+      </View>
     </SafeAreaProvider>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
+  safe: { flex: 1 },
   error: { flex: 1, justifyContent: 'center', padding: 24, gap: 16 },
   errorTitle: { color: colors.danger, fontSize: 22, fontWeight: '800' },
   errorText: { color: colors.muted, fontSize: 15 },
