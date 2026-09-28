@@ -6,18 +6,25 @@ import { colors } from '../theme';
 
 export type PickedVideo = { uri: string; mimeType?: string };
 
+// Auto-detect tends to mistake Uzbek for Azerbaijani/Turkish, so Uzbek is the explicit default.
 const LANGUAGES = [
-  { id: 'auto', label: 'Avto' },
   { id: 'uz', label: "O'zbek" },
   { id: 'ru', label: 'Русский' },
   { id: 'en', label: 'English' },
+  { id: 'auto', label: 'Avto' },
 ];
 
 export function HomeScreen({ onPicked }: { onPicked: (video: PickedVideo, language: string) => void }) {
-  const [language, setLanguage] = useState('auto');
+  const [language, setLanguage] = useState('uz');
 
   async function pick(fromCamera: boolean) {
-    const options: ImagePicker.ImagePickerOptions = { mediaTypes: ['videos'], quality: 1, videoMaxDuration: 180 };
+    const options: ImagePicker.ImagePickerOptions = {
+      mediaTypes: ['videos'],
+      quality: 1,
+      videoMaxDuration: 180,
+      // iOS: re-encode 4K/HEVC to 1080p H.264 so uploads stay small; captions don't need more.
+      videoExportPreset: ImagePicker.VideoExportPreset.H264_1920x1080,
+    };
     if (fromCamera) {
       const perm = await ImagePicker.requestCameraPermissionsAsync();
       if (!perm.granted) return Alert.alert('Ruxsat kerak', 'Kameraga ruxsat bering.');

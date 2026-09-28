@@ -11,6 +11,7 @@ import { colors } from './src/theme';
 
 type Step =
   | { name: 'home' }
+  | { name: 'uploading'; progress: number }
   | { name: 'transcribing' }
   | { name: 'editor'; job: Job }
   | { name: 'rendering'; job: Job }
@@ -23,9 +24,12 @@ export default function App() {
 
   async function handlePicked(picked: PickedVideo, language: string) {
     setVideo(picked);
-    setStep({ name: 'transcribing' });
+    setStep({ name: 'uploading', progress: 0 });
     try {
-      const job = await uploadVideo(picked.uri, picked.mimeType, language);
+      const job = await uploadVideo(picked.uri, picked.mimeType, language, (progress) =>
+        setStep((s) => (s.name === 'uploading' ? { name: 'uploading', progress } : s)),
+      );
+      setStep({ name: 'transcribing' });
       setStep({ name: 'editor', job: await waitForJob(job.id, 'transcribing') });
     } catch (e: any) {
       setStep({ name: 'error', message: e?.message ?? String(e) });
@@ -49,6 +53,9 @@ export default function App() {
       <SafeAreaView style={styles.root}>
         <StatusBar style="light" />
         {step.name === 'home' && <HomeScreen onPicked={handlePicked} />}
+        {step.name === 'uploading' && (
+          <Loading title="Video yuklanmoqda…" subtitle={`${Math.round(step.progress * 100)}%`} />
+        )}
         {step.name === 'transcribing' && (
           <Loading title="Nutq matnga aylantirilmoqda…" subtitle="Video uzunligiga qarab bir necha soniya ketadi" />
         )}

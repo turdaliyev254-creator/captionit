@@ -27,7 +27,7 @@ const upload = multer({
     },
     filename: (req, file, cb) => cb(null, 'input' + (path.extname(file.originalname) || '.mp4')),
   }),
-  limits: { fileSize: 500 * 1024 * 1024 },
+  limits: { fileSize: 2 * 1024 * 1024 * 1024 },
 });
 
 const app = express();
@@ -109,6 +109,16 @@ app.get('/jobs/:id/video', (req, res) => {
   const file = job && path.join(job.dir, 'output.mp4');
   if (!file || !fs.existsSync(file)) return res.status(404).json({ error: 'video not ready' });
   res.sendFile(file);
+});
+
+// Always answer with JSON so the app can show a readable message.
+app.use((err, req, res, next) => {
+  if (req.jobId) fs.rmSync(path.join(DATA_DIR, req.jobId), { recursive: true, force: true });
+  if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {
+    return res.status(413).json({ error: 'Video juda katta (maksimum 2 GB). Qisqaroq video tanlang.' });
+  }
+  console.error(err);
+  res.status(err.status || 500).json({ error: err.message || 'Server xatosi' });
 });
 
 app.listen(PORT, '0.0.0.0', () => console.log(`Caption backend on http://localhost:${PORT}`));

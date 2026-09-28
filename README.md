@@ -4,7 +4,7 @@ Videolarga avtomatik, so'zma-so'z animatsiyali subtitr qo'shadigan mobil ilova (
 
 ```
 mobile/   Expo (React Native) ilova — video tanlash, matnni tahrirlash, stil tanlash, galereyaga saqlash
-backend/  Node.js API — Whisper orqali transkripsiya, FFmpeg bilan subtitrni videoga yozish
+backend/  Node.js API — ElevenLabs Scribe (o‘zbek tili) orqali transkripsiya, FFmpeg bilan subtitrni videoga yozish
 ```
 
 ## Ishga tushirish
@@ -14,7 +14,7 @@ backend/  Node.js API — Whisper orqali transkripsiya, FFmpeg bilan subtitrni v
 ```bash
 cd backend
 npm install
-cp .env.example .env   # OPENAI_API_KEY ni yozing
+cp .env.example .env   # ELEVENLABS_API_KEY ni yozing (Speech to Text ruxsati bilan)
 npm run dev            # http://localhost:4000
 ```
 

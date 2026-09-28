@@ -1,4 +1,5 @@
 import Constants from 'expo-constants';
+import { File, UploadType } from 'expo-file-system';
 
 export type Word = { word: string; start: number; end: number };
 export type JobStatus = 'transcribing' | 'transcribed' | 'rendering' | 'done' | 'error';
@@ -32,12 +33,23 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return body as T;
 }
 
-export function uploadVideo(uri: string, mimeType: string | undefined, language: string) {
-  const form = new FormData();
-  const ext = mimeType?.split('/')[1] ?? 'mp4';
-  form.append('video', { uri, name: `video.${ext === 'quicktime' ? 'mov' : ext}`, type: mimeType ?? 'video/mp4' } as any);
-  form.append('language', language);
-  return request<Job>('/jobs', { method: 'POST', body: form });
+// Native multipart upload streams the file from disk instead of loading it into JS memory.
+export async function uploadVideo(
+  uri: string,
+  mimeType: string | undefined,
+  language: string,
+  onProgress?: (fraction: number) => void,
+): Promise<Job> {
+  const res = await new File(uri).upload(API_URL + '/jobs', {
+    uploadType: UploadType.MULTIPART,
+    fieldName: 'video',
+    mimeType: mimeType ?? 'video/mp4',
+    parameters: { language },
+    onProgress: ({ bytesSent, totalBytes }) => totalBytes > 0 && onProgress?.(bytesSent / totalBytes),
+  });
+  const body = JSON.parse(res.body || '{}');
+  if (res.status < 200 || res.status >= 300) throw new Error(body.error || `HTTP ${res.status}`);
+  return body as Job;
 }
 
 export const getJob = (id: string) => request<Job>(`/jobs/${id}`);
