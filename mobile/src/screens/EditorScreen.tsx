@@ -3,10 +3,10 @@ import {
   KeyboardAvoidingView, LayoutChangeEvent, PanResponder, Platform, Pressable, ScrollView, StyleSheet, Text, View,
 } from 'react-native';
 import { useEvent } from 'expo';
-import { useVideoPlayer, VideoView } from 'expo-video';
+import { useVideoPlayer, VideoPlayer, VideoView } from 'expo-video';
 import { Ionicons } from '@expo/vector-icons';
 import {
-  activePhrase, newId, Phrase, resolveStyle, setPhraseText, StyleOverrides,
+  CaptionStyle, newId, Phrase, resolveStyle, setPhraseText, StyleOverrides,
 } from '../../../shared/captions';
 import { getStyle } from '../../../shared/styles';
 import type { Job } from '../api';
@@ -52,7 +52,6 @@ export function EditorScreen({ job, videoUri, session, onChange, onExport, onBac
     p.play();
   });
   const { isPlaying } = useEvent(player, 'playingChange', { isPlaying: player.playing });
-  const time = usePlayerTime(player);
   const duration = job.duration ?? player.duration ?? 0;
 
   const update = (patch: Partial<EditorSession>) => onChange({ ...session, ...patch });
@@ -83,10 +82,8 @@ export function EditorScreen({ job, videoUri, session, onChange, onExport, onBac
     [player],
   );
 
-  const current = activePhrase(phrases, time);
-
   function addPhrase() {
-    const t = time;
+    const t = player.currentTime;
     const next = phrases.find((p) => p.start > t);
     const end = Math.min(t + 1.5, next ? next.start : t + 1.5, duration || t + 1.5);
     const phrase: Phrase = { id: newId(), start: t, end: Math.max(end, t + 0.3), words: [{ word: 'Matn', start: t, end: Math.max(end, t + 0.3) }] };
@@ -109,7 +106,7 @@ export function EditorScreen({ job, videoUri, session, onChange, onExport, onBac
         {frame.w > 0 && (
           <View style={{ width: frame.w, height: frame.h, borderRadius: 12, overflow: 'hidden' }} {...pan.panHandlers}>
             <VideoView player={player} style={StyleSheet.absoluteFill} contentFit="contain" nativeControls={false} />
-            <CaptionOverlay phrases={phrases} style={style} time={time} width={frame.w} height={frame.h} />
+            <LiveCaptions player={player} phrases={phrases} style={style} width={frame.w} height={frame.h} />
             {!isPlaying && (
               <View style={s.playOverlay} pointerEvents="none">
                 <Ionicons name="play" size={44} color="rgba(255,255,255,0.9)" />
@@ -123,9 +120,7 @@ export function EditorScreen({ job, videoUri, session, onChange, onExport, onBac
         <Pressable onPress={() => (isPlaying ? player.pause() : player.play())} style={s.iconBtn}>
           <Ionicons name={isPlaying ? 'pause' : 'play'} size={22} color={colors.text} />
         </Pressable>
-        <Text style={s.time}>
-          {fmt(time)} <Text style={{ color: colors.muted }}>/ {fmt(duration)}</Text>
-        </Text>
+        <TimeLabel player={player} duration={duration} />
         <Text style={s.hint}>Subtitrni surib joyini o'zgartiring</Text>
       </View>
 
@@ -137,7 +132,7 @@ export function EditorScreen({ job, videoUri, session, onChange, onExport, onBac
           {tab === 'text' && (
             <TextPanel
               phrases={phrases}
-              currentId={current?.id ?? null}
+              player={player}
               onChangeText={(id, text) => update({ phrases: phrases.map((p) => (p.id === id ? setPhraseText(p, text) : p)).filter((p) => p.words.length) })}
               onDelete={(id) => update({ phrases: phrases.filter((p) => p.id !== id) })}
               onAdd={addPhrase}
@@ -173,6 +168,21 @@ export function EditorScreen({ job, videoUri, session, onChange, onExport, onBac
         </View>
       </View>
     </KeyboardAvoidingView>
+  );
+}
+
+// Only these two re-render with playback time; the rest of the editor stays still.
+function LiveCaptions({ player, ...rest }: { player: VideoPlayer; phrases: Phrase[]; style: CaptionStyle; width: number; height: number }) {
+  const time = usePlayerTime(player);
+  return <CaptionOverlay {...rest} time={time} />;
+}
+
+function TimeLabel({ player, duration }: { player: VideoPlayer; duration: number }) {
+  const time = usePlayerTime(player, 250);
+  return (
+    <Text style={s.time}>
+      {fmt(time)} <Text style={{ color: colors.muted }}>/ {fmt(duration)}</Text>
+    </Text>
   );
 }
 

@@ -168,6 +168,7 @@ export type WordFrame = {
   text: string;
   active: boolean;
   spoken: boolean; // started already
+  hidden: boolean; // progressive word not spoken yet (invisible, see layoutWords)
   anim: { opacity: number; x: number; y: number; scale: number; rotate: number; blur: number };
   highlight: number; // 0..1, eased highlight strength for the active word
 };
@@ -257,6 +258,7 @@ export function framePhrase(phrases: Phrase[], style: CaptionStyle, t: number): 
       text: style.font.uppercase ? w.word.toLocaleUpperCase('uz') : w.word,
       active,
       spoken: i <= activeIdx,
+      hidden,
       anim: hidden ? { ...animate(animation.type, 0, i), opacity: 0 } : animate(animation.type, progress, i),
       highlight: active ? easeOutCubic(clamp01((t - w.start) / 0.12)) : 0,
     });
@@ -264,6 +266,13 @@ export function framePhrase(phrases: Phrase[], style: CaptionStyle, t: number): 
 
   const cp = animation.scope === 'phrase' ? 1 : easeOutCubic(clamp01((t - phrase.start) / 0.18));
   return { phrase, words: out, container: { opacity: cp, scale: 0.94 + 0.06 * cp } };
+}
+
+// Words that take part in layout. Without a background, unspoken progressive words keep their
+// place invisibly so nothing jumps; with a glass/box background they're left out so the
+// background grows with the words instead of showing an empty box.
+export function layoutWords(style: CaptionStyle, words: WordFrame[]) {
+  return style.container.type === 'none' ? words : words.filter((w) => !w.hidden);
 }
 
 // Stroke rendered as a ring of hard text-shadows: identical on web (CSS) and native (stacked copies).
@@ -288,6 +297,31 @@ export function wordColor(style: CaptionStyle, w: WordFrame) {
   return style.color;
 }
 
+// Uzbek has very long words ("topshirayotgandir"). If the longest word of a phrase can't fit the
+// caption width, shrink the font for that phrase. Width is estimated from character count so the
+// preview and the export compute exactly the same factor without measuring text.
+export function fitScale(style: CaptionStyle, words: WordFrame[]) {
+  const pad = style.container.type === 'none' ? 0 : style.container.padX * 2;
+  const available = style.maxWidth * 1080 - pad;
+  const glyph = style.font.uppercase ? 0.7 : 0.58; // average advance per character, in em
+  let widest = 0;
+  for (const w of words) {
+    const em = w.text.length * glyph + 2 * (wordMargin(style, w, 1));
+    widest = Math.max(widest, em * style.font.size);
+  }
+  return widest > available ? available / widest : 1;
+}
+
+const HIGHLIGHT_SCALE = 0.08;
+
 export function wordScale(style: CaptionStyle, w: WordFrame) {
-  return style.highlightMode === 'scale' ? 1 + 0.12 * w.highlight : 1;
+  return style.highlightMode === 'scale' ? 1 + HIGHLIGHT_SCALE * w.highlight : 1;
+}
+
+// Horizontal margin (px) on each side of a word. Scaling grows a word from its centre, so long
+// words need room proportional to their length or they run into their neighbours.
+export function wordMargin(style: CaptionStyle, w: WordFrame, size: number) {
+  const base = style.highlightMode === 'box' ? 0.04 : 0.16;
+  const grow = style.highlightMode === 'scale' ? (w.text.length * 0.62 * HIGHLIGHT_SCALE) / 2 : 0;
+  return size * (base + grow);
 }

@@ -1,7 +1,7 @@
 import React from 'react';
 import { AbsoluteFill, useCurrentFrame, useVideoConfig } from 'remotion';
 import {
-  CaptionStyle, framePhrase, Phrase, strokeOffsets, wordColor, wordOpacity, wordScale,
+  CaptionStyle, fitScale, framePhrase, layoutWords, Phrase, strokeOffsets, wordColor, wordMargin, wordOpacity, wordScale,
 } from '../../shared/captions';
 import { CSS_FONT } from './fonts';
 
@@ -40,11 +40,13 @@ function containerStyle(style: CaptionStyle, k: number): React.CSSProperties {
   };
 }
 
-export const CaptionLayer: React.FC<{ phrases: Phrase[]; style: CaptionStyle }> = ({ phrases, style }) => {
+export const CaptionLayer: React.FC<{ phrases: Phrase[]; style: CaptionStyle }> = ({ phrases, style: baseStyle }) => {
   const frame = useCurrentFrame();
   const { fps, width, height } = useVideoConfig();
-  const f = framePhrase(phrases, style, frame / fps);
+  const f = framePhrase(phrases, baseStyle, frame / fps);
   if (!f) return null;
+  const fit = fitScale(baseStyle, f.words);
+  const style = fit < 1 ? { ...baseStyle, font: { ...baseStyle.font, size: baseStyle.font.size * fit } } : baseStyle;
 
   const k = width / 1080;
   const size = style.font.size * k;
@@ -67,7 +69,7 @@ export const CaptionLayer: React.FC<{ phrases: Phrase[]; style: CaptionStyle }> 
             ...containerStyle(style, k),
           }}
         >
-          {f.words.map((w) => {
+          {layoutWords(style, f.words).map((w) => {
             const a = w.anim;
             const box = style.highlightMode === 'box';
             return (
@@ -75,7 +77,7 @@ export const CaptionLayer: React.FC<{ phrases: Phrase[]; style: CaptionStyle }> 
                 key={`${f.phrase.id}-${w.index}`}
                 style={{
                   display: 'inline-block',
-                  margin: `${size * 0.04}px ${size * (box ? 0.04 : 0.13)}px`,
+                  margin: `${size * 0.04}px ${wordMargin(style, w, size)}px`,
                   padding: box ? `${size * 0.02}px ${size * 0.14}px` : undefined,
                   borderRadius: size * 0.18,
                   backgroundColor: box && w.active ? style.highlightColor : 'transparent',

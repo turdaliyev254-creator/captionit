@@ -1,9 +1,9 @@
-import { memo, useState } from 'react';
+import { memo, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
-  CaptionStyle, framePhrase, Phrase, strokeOffsets, wordColor, wordOpacity, wordScale, WordFrame,
+  CaptionStyle, fitScale, framePhrase, layoutWords, Phrase, strokeOffsets, wordColor, wordMargin, wordOpacity, wordScale, WordFrame,
 } from '../../../shared/captions';
 import { rnFont } from '../fonts';
 
@@ -47,27 +47,39 @@ function useLines(words: WordFrame[], style: CaptionStyle, k: number, innerWidth
     </Text>
   );
 
+  // While a new word set is being measured (one frame), reuse the last line split so the
+  // caption doesn't blink; extra words go on the last line until the measurement lands.
+  const last = useRef<number[] | null>(null);
+  if (counts) last.current = counts;
+  const split = counts ?? last.current;
+
   let rows: WordFrame[][] | null = null;
-  if (counts) {
+  if (split && words.length) {
     rows = [];
     let i = 0;
-    for (const n of counts) {
+    for (const n of split) {
+      if (i >= words.length) break;
       if (n > 0) rows.push(words.slice(i, i + n));
       i += n;
     }
-    if (i < words.length) rows.push(words.slice(i)); // safety: never drop words
+    if (i < words.length) {
+      if (rows.length) rows[rows.length - 1] = rows[rows.length - 1].concat(words.slice(i));
+      else rows.push(words.slice(i));
+    }
   }
   return { rows, measurer };
 }
 
 // React Native twin of backend/renderer/CaptionLayer.tsx — keep the two in sync.
-export const CaptionOverlay = memo(function CaptionOverlay({ phrases, style, time, width, height, scale }: Props) {
-  const f = framePhrase(phrases, style, time);
+export const CaptionOverlay = memo(function CaptionOverlay({ phrases, style: baseStyle, time, width, height, scale }: Props) {
+  const f = framePhrase(phrases, baseStyle, time);
+  const fit = f ? fitScale(baseStyle, f.words) : 1;
+  const style = fit < 1 ? { ...baseStyle, font: { ...baseStyle.font, size: baseStyle.font.size * fit } } : baseStyle;
   const k = scale ?? width / 1080;
   const c = style.container;
   const padX = c.type === 'none' ? 0 : c.padX * k;
   const padY = c.type === 'none' ? 0 : c.padY * k;
-  const { rows, measurer } = useLines(f?.words ?? [], style, k, style.maxWidth * width - padX * 2);
+  const { rows, measurer } = useLines(f ? layoutWords(style, f.words) : [], style, k, style.maxWidth * width - padX * 2);
   if (!f) return null;
 
   return (
@@ -148,7 +160,7 @@ function CaptionWord({ w, style, k }: { w: WordFrame; style: CaptionStyle; k: nu
   return (
     <View
       style={{
-        marginHorizontal: size * (box ? 0.04 : 0.13),
+        marginHorizontal: wordMargin(style, w, size),
         marginVertical: size * 0.04,
         paddingHorizontal: box ? size * 0.14 : 0,
         paddingVertical: box ? size * 0.02 : 0,

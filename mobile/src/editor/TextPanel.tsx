@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Phrase } from '../../../shared/captions';
+import type { VideoPlayer } from 'expo-video';
+import { activePhrase, Phrase } from '../../../shared/captions';
+import { usePlayerTime } from '../captions/usePlayerTime';
 import { colors } from '../theme';
 
 type Props = {
   phrases: Phrase[];
-  currentId: string | null;
+  player: VideoPlayer;
   onChangeText: (id: string, text: string) => void;
   onDelete: (id: string) => void;
   onAdd: () => void;
@@ -15,7 +17,8 @@ type Props = {
 
 const fmt = (t: number) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}.${Math.floor((t % 1) * 10)}`;
 
-export function TextPanel({ phrases, currentId, onChangeText, onDelete, onAdd, onSeek }: Props) {
+export function TextPanel({ phrases, player, onChangeText, onDelete, onAdd, onSeek }: Props) {
+  const currentId = activePhrase(phrases, usePlayerTime(player, 250))?.id ?? null;
   return (
     <View style={{ gap: 8, paddingHorizontal: 16 }}>
       <Pressable style={s.add} onPress={onAdd}>
