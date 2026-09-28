@@ -1,21 +1,30 @@
 import React from 'react';
 import { AbsoluteFill, Composition, OffthreadVideo } from 'remotion';
 import type { CaptionStyle, Phrase } from '../../shared/captions';
+import type { Overlay, Trim } from '../../shared/overlays';
 import { CaptionLayer } from './CaptionLayer';
+import { OverlayLayer } from './OverlayLayer';
 
 export type CaptionedProps = {
   videoSrc: string;
   width: number;
   height: number;
   fps: number;
-  duration: number; // seconds
-  phrases: Phrase[];
+  duration: number; // seconds, after trimming
+  trim: Trim; // in source seconds
+  phrases: Phrase[]; // on the trimmed timeline
+  overlays: Overlay[]; // on the trimmed timeline
   style: CaptionStyle;
 };
 
-const Captioned: React.FC<CaptionedProps> = ({ videoSrc, phrases, style }) => (
+const Captioned: React.FC<CaptionedProps> = ({ videoSrc, fps, trim, phrases, overlays, style }) => (
   <AbsoluteFill style={{ backgroundColor: 'black' }}>
-    <OffthreadVideo src={videoSrc} />
+    <OffthreadVideo
+      src={videoSrc}
+      trimBefore={Math.round((trim?.start ?? 0) * fps)}
+      trimAfter={trim ? Math.round(trim.end * fps) : undefined}
+    />
+    <OverlayLayer overlays={overlays ?? []} />
     <CaptionLayer phrases={phrases} style={style} />
   </AbsoluteFill>
 );

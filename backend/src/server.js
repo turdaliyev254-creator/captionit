@@ -41,6 +41,21 @@ const upload = multer({
   limits: { fileSize: 2 * 1024 * 1024 * 1024 },
 });
 
+// Images / clips placed over the video, stored next to the job.
+const assetUpload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => {
+      const job = jobs.get(req.params.id);
+      if (!job) return cb(Object.assign(new Error('job not found'), { status: 404 }));
+      const dir = path.join(job.dir, 'assets');
+      fs.mkdirSync(dir, { recursive: true });
+      cb(null, dir);
+    },
+    filename: (req, file, cb) => cb(null, crypto.randomUUID() + (path.extname(file.originalname) || '')),
+  }),
+  limits: { fileSize: 500 * 1024 * 1024 },
+});
+
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
@@ -95,14 +110,32 @@ app.get('/jobs/:id/input', (req, res) => {
   res.sendFile(job.input);
 });
 
+app.post('/jobs/:id/assets', assetUpload.single('file'), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'file is required (field "file")' });
+  res.status(201).json({ src: `/jobs/${req.params.id}/assets/${req.file.filename}` });
+});
+
+app.get('/jobs/:id/assets/:file', (req, res) => {
+  const job = jobs.get(req.params.id);
+  const file = job && path.join(job.dir, 'assets', path.basename(req.params.file));
+  if (!file || !fs.existsSync(file)) return res.status(404).json({ error: 'asset not found' });
+  res.sendFile(file);
+});
+
 // 2) Export: render the edited phrases with the chosen (already resolved) style.
+// Phrases and overlays arrive already shifted to the trimmed timeline (0 = trim.start).
 app.post('/jobs/:id/render', async (req, res) => {
   const job = jobs.get(req.params.id);
   if (!job) return res.status(404).json({ error: 'job not found' });
   if (job.status === 'transcribing' || job.status === 'rendering' || !job.width) {
     return res.status(409).json({ error: `job is ${job.status}` });
   }
-  const { phrases, style } = req.body || {};
+  const { phrases, style, overlays = [] } = req.body || {};
+  const trim = {
+    start: Math.max(0, Number(req.body?.trim?.start) || 0),
+    end: Math.min(job.duration, Number(req.body?.trim?.end) || job.duration),
+  };
+  if (trim.end - trim.start < 0.5) return res.status(400).json({ error: 'trim is too short' });
   if (!Array.isArray(phrases) || !style?.font) return res.status(400).json({ error: 'phrases and style are required' });
 
   Object.assign(job, { status: 'rendering', progress: 0, error: null });
@@ -118,9 +151,12 @@ app.post('/jobs/:id/render', async (req, res) => {
         width: job.width,
         height: job.height,
         fps: job.fps,
-        duration: job.duration,
+        duration: trim.end - trim.start,
+        trim,
         phrases,
         style,
+        // Asset paths become absolute URLs the renderer can fetch.
+        overlays: overlays.map((o) => ({ ...o, src: o.src ? `http://localhost:${PORT}${o.src}` : undefined })),
       },
       onProgress: (p) => (job.progress = p),
     });

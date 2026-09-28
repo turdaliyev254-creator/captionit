@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Alert, StyleSheet, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { buildPhrases, resolveStyle } from '../shared/captions';
+import { shiftForTrim, shiftPhrasesForTrim } from '../shared/overlays';
 import { getStyle } from '../shared/styles';
 import { API_URL, Job, renderJob, uploadVideo, waitForJob } from './src/api';
 import { Button, Loading } from './src/components';
@@ -38,7 +39,13 @@ export default function App() {
       setStep({ name: 'transcribing' });
       const done = await waitForJob(uploaded.id, 'transcribing');
       setJob(done);
-      setSession({ phrases: buildPhrases(done.words), styleId: 'liquid-glass', overrides: {} });
+      setSession({
+        phrases: buildPhrases(done.words),
+        styleId: 'liquid-glass',
+        overrides: {},
+        trim: { start: 0, end: done.duration ?? 0 },
+        overlays: [],
+      });
       setStep({ name: 'editor' });
     } catch (e: any) {
       setStep({ name: 'error', message: e?.message ?? String(e), canReturn: false });
@@ -47,10 +54,20 @@ export default function App() {
 
   async function handleExport() {
     if (!job || !session) return;
+    if (session.overlays.some((o) => !o.src)) {
+      Alert.alert('Biroz kuting', "Qo'shilgan media hali serverga yuklanmoqda.");
+      return;
+    }
     setStep({ name: 'rendering', progress: 0 });
     try {
       const style = resolveStyle(getStyle(session.styleId), session.overrides);
-      await renderJob(job.id, { phrases: session.phrases, style });
+      const { trim } = session;
+      await renderJob(job.id, {
+        style,
+        trim,
+        phrases: shiftPhrasesForTrim(session.phrases, trim),
+        overlays: shiftForTrim(session.overlays, trim).map(({ uri, ...o }) => o),
+      });
       const done = await waitForJob(job.id, 'rendering', (j) => setStep({ name: 'rendering', progress: j.progress ?? 0 }));
       setStep({ name: 'result', videoUrl: `${API_URL}${done.videoUrl}?t=${Date.now()}` });
     } catch (e: any) {
@@ -76,7 +93,7 @@ export default function App() {
           <Loading title="Nutq matnga aylantirilmoqda…" subtitle="Video uzunligiga qarab bir necha soniya ketadi" />
         )}
         {step.name === 'editor' && job && video && session && (
-          <EditorScreen job={job} videoUri={video.uri} session={session} onChange={setSession} onExport={handleExport} onBack={reset} />
+          <EditorScreen job={job} videoUri={video.uri} session={session} setSession={setSession} onExport={handleExport} onBack={reset} />
         )}
         {step.name === 'rendering' && (
           <Loading title="Video tayyorlanmoqda…" subtitle={`${Math.round(step.progress * 100)}%`} />

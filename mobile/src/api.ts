@@ -1,6 +1,7 @@
 import Constants from 'expo-constants';
 import { File, UploadType } from 'expo-file-system';
 import type { CaptionStyle, Phrase, Word } from '../../shared/captions';
+import type { Overlay, Trim } from '../../shared/overlays';
 
 export type JobStatus = 'transcribing' | 'transcribed' | 'rendering' | 'done' | 'error';
 export type Job = {
@@ -57,7 +58,23 @@ export async function uploadVideo(
 
 export const getJob = (id: string) => request<Job>(`/jobs/${id}`);
 
-export function renderJob(id: string, opts: { phrases: Phrase[]; style: CaptionStyle }) {
+// Uploads an image/clip used as an overlay; returns its backend path.
+export async function uploadAsset(jobId: string, uri: string, mimeType?: string): Promise<string> {
+  const res = await new File(uri).upload(`${API_URL}/jobs/${jobId}/assets`, {
+    uploadType: UploadType.MULTIPART,
+    fieldName: 'file',
+    mimeType: mimeType ?? 'application/octet-stream',
+  });
+  let body: any = {};
+  try {
+    body = JSON.parse(res.body || '{}');
+  } catch {}
+  if (res.status < 200 || res.status >= 300 || !body.src) throw new Error(body.error || `Media yuklanmadi (HTTP ${res.status})`);
+  return body.src;
+}
+
+// phrases/overlays must already be on the trimmed timeline (see shared/overlays shiftForTrim).
+export function renderJob(id: string, opts: { phrases: Phrase[]; style: CaptionStyle; trim: Trim; overlays: Overlay[] }) {
   return request<Job>(`/jobs/${id}/render`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
