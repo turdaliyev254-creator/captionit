@@ -5,16 +5,27 @@ const crypto = require('crypto');
 const express = require('express');
 const multer = require('multer');
 const cors = require('cors');
-const { probe, extractAudio, burnSubtitles } = require('./media');
+const { probe, extractAudio } = require('./media');
 const { transcribe } = require('./transcribe');
-const { STYLES, buildAss } = require('./subtitles');
+const { renderCaptioned, getBundle } = require('./render');
 
 const PORT = Number(process.env.PORT || 4000);
 const DATA_DIR = path.resolve(process.env.DATA_DIR || path.join(__dirname, '..', 'data'));
 fs.mkdirSync(DATA_DIR, { recursive: true });
 
-// In-memory job store; fine for the MVP, swap for a DB later.
+// Jobs live in memory and are mirrored to data/<id>/job.json so a server restart keeps them.
 const jobs = new Map();
+for (const id of fs.readdirSync(DATA_DIR)) {
+  try {
+    const job = JSON.parse(fs.readFileSync(path.join(DATA_DIR, id, 'job.json'), 'utf8'));
+    // Work interrupted by a restart can't resume; let the client retry.
+    if (job.status === 'transcribing' || job.status === 'rendering') Object.assign(job, { status: 'error', error: 'Server qayta ishga tushdi, qaytadan urinib ko‘ring' });
+    jobs.set(id, job);
+  } catch {}
+}
+function save(job) {
+  fs.writeFileSync(path.join(job.dir, 'job.json'), JSON.stringify(job));
+}
 
 const upload = multer({
   storage: multer.diskStorage({
@@ -32,7 +43,7 @@ const upload = multer({
 
 const app = express();
 app.use(cors());
-app.use(express.json({ limit: '5mb' }));
+app.use(express.json({ limit: '10mb' }));
 
 function publicJob(job) {
   const { input, dir, ...rest } = job;
@@ -40,10 +51,6 @@ function publicJob(job) {
 }
 
 app.get('/health', (req, res) => res.json({ ok: true }));
-
-app.get('/styles', (req, res) => {
-  res.json(Object.entries(STYLES).map(([id, s]) => ({ id, label: s.label, primary: s.primary, highlight: s.highlight })));
-});
 
 // 1) Upload a video -> starts transcription.
 app.post('/jobs', upload.single('video'), async (req, res) => {
@@ -72,6 +79,7 @@ app.post('/jobs', upload.single('video'), async (req, res) => {
     console.error(`[${id}] transcription failed`, err);
     Object.assign(job, { status: 'error', error: err.message.split('\n')[0] });
   }
+  save(job);
 });
 
 app.get('/jobs/:id', (req, res) => {
@@ -80,28 +88,49 @@ app.get('/jobs/:id', (req, res) => {
   res.json(publicJob(job));
 });
 
-// 2) Render: burn styled captions into the video. Accepts edited words.
+// Source video, read by the Remotion renderer.
+app.get('/jobs/:id/input', (req, res) => {
+  const job = jobs.get(req.params.id);
+  if (!job) return res.status(404).json({ error: 'job not found' });
+  res.sendFile(job.input);
+});
+
+// 2) Export: render the edited phrases with the chosen (already resolved) style.
 app.post('/jobs/:id/render', async (req, res) => {
   const job = jobs.get(req.params.id);
   if (!job) return res.status(404).json({ error: 'job not found' });
-  if (!['transcribed', 'done', 'error'].includes(job.status) || !job.width) {
+  if (job.status === 'transcribing' || job.status === 'rendering' || !job.width) {
     return res.status(409).json({ error: `job is ${job.status}` });
   }
-  const { style = 'classic', position = 'bottom', words } = req.body || {};
-  if (Array.isArray(words)) job.words = words;
+  const { phrases, style } = req.body || {};
+  if (!Array.isArray(phrases) || !style?.font) return res.status(400).json({ error: 'phrases and style are required' });
 
-  Object.assign(job, { status: 'rendering', style, position, error: null });
+  Object.assign(job, { status: 'rendering', progress: 0, error: null });
   res.json(publicJob(job));
 
+  const output = path.join(job.dir, 'output.mp4');
+  const started = Date.now();
   try {
-    const assFile = path.join(job.dir, 'captions.ass');
-    fs.writeFileSync(assFile, buildAss(job.words, { width: job.width, height: job.height, styleId: style, position }));
-    await burnSubtitles(job.input, assFile, path.join(job.dir, 'output.mp4'));
-    Object.assign(job, { status: 'done', videoUrl: `/jobs/${job.id}/video` });
+    await renderCaptioned({
+      output,
+      inputProps: {
+        videoSrc: `http://localhost:${PORT}/jobs/${job.id}/input`,
+        width: job.width,
+        height: job.height,
+        fps: job.fps,
+        duration: job.duration,
+        phrases,
+        style,
+      },
+      onProgress: (p) => (job.progress = p),
+    });
+    Object.assign(job, { status: 'done', progress: 1, videoUrl: `/jobs/${job.id}/video` });
+    console.log(`[${job.id}] rendered in ${((Date.now() - started) / 1000).toFixed(1)}s`);
   } catch (err) {
     console.error(`[${job.id}] render failed`, err);
     Object.assign(job, { status: 'error', error: err.message.split('\n')[0] });
   }
+  save(job);
 });
 
 app.get('/jobs/:id/video', (req, res) => {
@@ -121,4 +150,7 @@ app.use((err, req, res, next) => {
   res.status(err.status || 500).json({ error: err.message || 'Server xatosi' });
 });
 
-app.listen(PORT, '0.0.0.0', () => console.log(`Caption backend on http://localhost:${PORT}`));
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Caption backend on http://localhost:${PORT}`);
+  getBundle().then(() => console.log('Remotion bundle ready'), (err) => console.error('Remotion bundle failed', err));
+});

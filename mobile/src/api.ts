@@ -1,7 +1,7 @@
 import Constants from 'expo-constants';
 import { File, UploadType } from 'expo-file-system';
+import type { CaptionStyle, Phrase, Word } from '../../shared/captions';
 
-export type Word = { word: string; start: number; end: number };
 export type JobStatus = 'transcribing' | 'transcribed' | 'rendering' | 'done' | 'error';
 export type Job = {
   id: string;
@@ -9,13 +9,13 @@ export type Job = {
   words: Word[];
   width?: number;
   height?: number;
+  fps?: number;
   duration?: number;
   text?: string;
+  progress?: number;
   videoUrl?: string;
   error?: string | null;
 };
-export type CaptionStyle = { id: string; label: string; primary: string; highlight: string };
-export type Position = 'top' | 'middle' | 'bottom';
 
 // In development the backend runs on the same machine as the Expo dev server.
 function resolveBaseUrl() {
@@ -47,16 +47,17 @@ export async function uploadVideo(
     parameters: { language },
     onProgress: ({ bytesSent, totalBytes }) => totalBytes > 0 && onProgress?.(bytesSent / totalBytes),
   });
-  const body = JSON.parse(res.body || '{}');
-  if (res.status < 200 || res.status >= 300) throw new Error(body.error || `HTTP ${res.status}`);
+  let body: any = {};
+  try {
+    body = JSON.parse(res.body || '{}');
+  } catch {}
+  if (res.status < 200 || res.status >= 300) throw new Error(body.error || `Server xatosi (HTTP ${res.status})`);
   return body as Job;
 }
 
 export const getJob = (id: string) => request<Job>(`/jobs/${id}`);
 
-export const getStyles = () => request<CaptionStyle[]>('/styles');
-
-export function renderJob(id: string, opts: { style: string; position: Position; words: Word[] }) {
+export function renderJob(id: string, opts: { phrases: Phrase[]; style: CaptionStyle }) {
   return request<Job>(`/jobs/${id}/render`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -65,13 +66,19 @@ export function renderJob(id: string, opts: { style: string; position: Position;
 }
 
 // Polls until the job leaves the given in-progress status.
-export async function waitForJob(id: string, whileStatus: JobStatus, intervalMs = 1500): Promise<Job> {
+export async function waitForJob(
+  id: string,
+  whileStatus: JobStatus,
+  onUpdate?: (job: Job) => void,
+  intervalMs = 1000,
+): Promise<Job> {
   for (;;) {
     const job = await getJob(id);
     if (job.status !== whileStatus) {
       if (job.status === 'error') throw new Error(job.error || 'Xatolik yuz berdi');
       return job;
     }
+    onUpdate?.(job);
     await new Promise((r) => setTimeout(r, intervalMs));
   }
 }

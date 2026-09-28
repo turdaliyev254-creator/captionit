@@ -1,3 +1,6 @@
 .DS_Store
 node_modules/
 .env
+
+# Commercial font (licensed separately), keep out of git
+shared/fonts/gilroy/

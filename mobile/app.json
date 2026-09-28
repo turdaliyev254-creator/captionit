@@ -39,7 +39,8 @@
           "savePhotosPermission": "Tayyor videoni galereyaga saqlash uchun ruxsat kerak.",
           "isAccessMediaLocationEnabled": false
         }
-      ]
+      ],
+      "expo-font"
     ],
     "backgroundColor": "#0B0B0F"
   }
