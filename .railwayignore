@@ -1,0 +1,8 @@
+# Uploaded with `railway up --no-gitignore` so the locally licensed Gilroy fonts
+# (gitignored, shared/fonts/gilroy) reach the server. Everything else that git ignores is listed here.
+mobile/
+**/node_modules/
+backend/data/
+**/.env
+**/.DS_Store
+.git/

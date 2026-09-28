@@ -1,6 +1,7 @@
 const { execFile } = require('child_process');
-const ffmpegPath = require('ffmpeg-static');
-const ffprobePath = require('ffprobe-static').path;
+// In Docker the system ffmpeg/ffprobe are used (FFMPEG_PATH / FFPROBE_PATH); locally the npm binaries.
+const ffmpegPath = process.env.FFMPEG_PATH || require('ffmpeg-static');
+const ffprobePath = process.env.FFPROBE_PATH || require('ffprobe-static').path;
 
 function run(bin, args) {
   return new Promise((resolve, reject) => {

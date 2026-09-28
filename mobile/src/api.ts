@@ -18,11 +18,17 @@ export type Job = {
   error?: string | null;
 };
 
-// In development the backend runs on the same machine as the Expo dev server.
+const PRODUCTION_API = 'https://backend-production-fc51.up.railway.app';
+
+// Production server by default. EXPO_PUBLIC_API_URL=local uses a backend running next to the
+// Expo dev server (port 4000); any other value is used as the URL itself.
 function resolveBaseUrl() {
-  if (process.env.EXPO_PUBLIC_API_URL) return process.env.EXPO_PUBLIC_API_URL;
-  const host = Constants.expoConfig?.hostUri?.split(':')[0] ?? 'localhost';
-  return `http://${host}:4000`;
+  const env = process.env.EXPO_PUBLIC_API_URL;
+  if (env === 'local') {
+    const host = Constants.expoConfig?.hostUri?.split(':')[0] ?? 'localhost';
+    return `http://${host}:4000`;
+  }
+  return env || PRODUCTION_API;
 }
 
 export const API_URL = resolveBaseUrl();

@@ -4,10 +4,25 @@ Videolarga avtomatik, so'zma-so'z animatsiyali subtitr qo'shadigan mobil ilova (
 
 ```
 mobile/   Expo (React Native) ilova — video tanlash, matnni tahrirlash, stil tanlash, galereyaga saqlash
-backend/  Node.js API — ElevenLabs Scribe (o‘zbek tili) orqali transkripsiya, FFmpeg bilan subtitrni videoga yozish
+backend/  Node.js API — ElevenLabs Scribe (o‘zbek tili) orqali transkripsiya, Remotion bilan eksport
+shared/   Subtitr dvigateli, stillar va overlaylar (ilova va eksport uchun umumiy)
 ```
 
-## Ishga tushirish
+## Server (Railway)
+
+Backend **https://backend-production-fc51.up.railway.app** manzilida ishlaydi (Railway, `captionit` loyihasi, `/data` volume).
+Mobil ilova standart holatda shu serverga ulanadi.
+
+Yangilash:
+
+```bash
+railway up --no-gitignore --detach
+```
+
+`--no-gitignore` litsenziyali Gilroy shriftlarini (`shared/fonts/gilroy`, gitda yo'q) serverga yetkazadi; qolgan keraksiz fayllar `.railwayignore` orqali chiqarib tashlanadi.
+API kalitlar Railway'da `ELEVENLABS_API_KEY` va `OPENAI_API_KEY` o'zgaruvchilari sifatida saqlanadi.
+
+## Lokal ishga tushirish
 
 ### 1. Backend
 
@@ -23,7 +38,7 @@ npm run dev            # http://localhost:4000
 ```bash
 cd mobile
 npm install
-npx expo start
+EXPO_PUBLIC_API_URL=local npx expo start   # lokal backend bilan; o'zgaruvchisiz — Railway serveri
 ```
 
 Telefon va kompyuter bitta Wi‑Fi tarmog'ida bo'lishi kerak. Ilova backend manzilini Expo dev server manzilidan avtomatik oladi (port 4000). Boshqa manzil kerak bo'lsa: `EXPO_PUBLIC_API_URL=http://192.168.x.x:4000 npx expo start`.
