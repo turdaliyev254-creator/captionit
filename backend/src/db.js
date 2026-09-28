@@ -24,6 +24,9 @@ function openDb(dataDir) {
       sent_at INTEGER NOT NULL
     );
   `);
+  // Columns added after the first release.
+  const cols = db.prepare('PRAGMA table_info(users)').all().map((c) => c.name);
+  if (!cols.includes('avatar_at')) db.exec('ALTER TABLE users ADD COLUMN avatar_at INTEGER');
   return db;
 }
 

@@ -13,6 +13,7 @@ import { useCaptionFonts } from './src/fonts';
 import { AuthScreen } from './src/screens/AuthScreen';
 import { ContactScreen } from './src/screens/ContactScreen';
 import { EditorScreen, EditorSession } from './src/screens/EditorScreen';
+import { EditProfileScreen } from './src/screens/EditProfileScreen';
 import { HomeScreen, PickedVideo } from './src/screens/HomeScreen';
 import { ProfileScreen } from './src/screens/ProfileScreen';
 import { ResultScreen } from './src/screens/ResultScreen';
@@ -31,6 +32,7 @@ type Step =
   | { name: 'profile' }
   | { name: 'video'; video: VideoItem }
   | { name: 'contact'; back: Step }
+  | { name: 'editProfile' }
   | { name: 'error'; message: string; canReturn: boolean };
 
 export default function App() {
@@ -176,6 +178,7 @@ export default function App() {
                   onBack={() => setStep({ name: 'home' })}
                   onOpenVideo={(v) => setStep({ name: 'video', video: v })}
                   onContact={() => setStep({ name: 'contact', back: { name: 'profile' } })}
+                  onEdit={() => setStep({ name: 'editProfile' })}
                   onUserChange={setUser}
                   onSignOut={signOut}
                   onNewVideo={reset}
@@ -190,6 +193,9 @@ export default function App() {
                 />
               )}
               {step.name === 'contact' && <ContactScreen onBack={() => setStep(step.back)} />}
+              {step.name === 'editProfile' && (
+                <EditProfileScreen user={user} onBack={() => setStep({ name: 'profile' })} onUserChange={setUser} />
+              )}
               {step.name === 'error' && (
                 <View style={styles.error}>
                   <Text style={styles.errorTitle}>Xatolik</Text>

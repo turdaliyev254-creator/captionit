@@ -43,6 +43,9 @@ function createAuth({ db, dataDir }) {
     userByApple: db.prepare('SELECT * FROM users WHERE apple_sub = ?'),
     insertUser: db.prepare('INSERT INTO users (id, phone, email, name, google_sub, apple_sub, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'),
     updateName: db.prepare('UPDATE users SET name = ? WHERE id = ?'),
+    updateEmail: db.prepare('UPDATE users SET email = ? WHERE id = ?'),
+    updatePhone: db.prepare('UPDATE users SET phone = ? WHERE id = ?'),
+    setAvatar: db.prepare('UPDATE users SET avatar_at = ? WHERE id = ?'),
     setConsent: db.prepare('UPDATE users SET ai_consent_at = ? WHERE id = ?'),
     deleteUser: db.prepare('DELETE FROM users WHERE id = ?'),
     otpGet: db.prepare('SELECT * FROM otp_codes WHERE phone = ?'),
@@ -52,7 +55,11 @@ function createAuth({ db, dataDir }) {
   };
 
   function publicUser(u) {
-    return { id: u.id, phone: u.phone, email: u.email, name: u.name, aiConsent: !!u.ai_consent_at, createdAt: u.created_at };
+    return {
+      id: u.id, phone: u.phone, email: u.email, name: u.name, aiConsent: !!u.ai_consent_at, createdAt: u.created_at,
+      avatarUrl: u.avatar_at ? `/me/avatar?v=${u.avatar_at}` : null,
+      providers: { phone: !!u.phone, google: !!u.google_sub, apple: !!u.apple_sub },
+    };
   }
 
   async function issueToken(user) {
@@ -98,15 +105,8 @@ function createAuth({ db, dataDir }) {
     return { phone, ...(exposeCode ? { devCode: code } : {}) };
   }
 
-  async function verifyOtp(rawPhone, code, name) {
-    const phone = normalizePhone(rawPhone);
-    if (isReview(phone)) {
-      const given = String(code || '').trim();
-      if (given.length !== reviewCode.length || !crypto.timingSafeEqual(Buffer.from(given), Buffer.from(reviewCode))) {
-        throw new HttpError(400, 'Kod noto‘g‘ri.', 'otp_wrong');
-      }
-      return session(q.userByPhone.get(phone) ?? createUser({ phone, name: 'App Review' }));
-    }
+  // Checks and consumes an SMS code; throws on failure.
+  function checkOtp(phone, code) {
     const row = q.otpGet.get(phone);
     if (!row || row.expires_at < Date.now()) throw new HttpError(400, 'Kod eskirgan. Yangi kod so‘rang.', 'otp_expired');
     if (row.attempts >= OTP_MAX_ATTEMPTS) throw new HttpError(429, 'Urinishlar ko‘p bo‘ldi. Yangi kod so‘rang.', 'otp_locked');
@@ -116,6 +116,34 @@ function createAuth({ db, dataDir }) {
       throw new HttpError(400, 'Kod noto‘g‘ri.', 'otp_wrong');
     }
     q.otpDelete.run(phone);
+  }
+
+  // Change (or add) the phone number of a signed-in user after verifying a code sent to it.
+  function changePhone(userId, rawPhone, code) {
+    const phone = normalizePhone(rawPhone);
+    const owner = q.userByPhone.get(phone);
+    if (owner && owner.id !== userId) throw new HttpError(409, 'Bu raqam boshqa akkauntga bog‘langan.', 'phone_taken');
+    checkOtp(phone, code);
+    q.updatePhone.run(phone, userId);
+    return q.userById.get(userId);
+  }
+
+  function updateEmail(userId, raw) {
+    const email = String(raw || '').trim().toLowerCase();
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new HttpError(400, 'Email noto‘g‘ri.', 'bad_email');
+    q.updateEmail.run(email || null, userId);
+  }
+
+  async function verifyOtp(rawPhone, code, name) {
+    const phone = normalizePhone(rawPhone);
+    if (isReview(phone)) {
+      const given = String(code || '').trim();
+      if (given.length !== reviewCode.length || !crypto.timingSafeEqual(Buffer.from(given), Buffer.from(reviewCode))) {
+        throw new HttpError(400, 'Kod noto‘g‘ri.', 'otp_wrong');
+      }
+      return session(q.userByPhone.get(phone) ?? createUser({ phone, name: 'App Review' }));
+    }
+    checkOtp(phone, code);
     const user = q.userByPhone.get(phone) ?? createUser({ phone, name: name?.trim() || null });
     return session(user);
   }
@@ -172,6 +200,9 @@ function createAuth({ db, dataDir }) {
     signInApple,
     requireUser,
     updateName: (id, name) => q.updateName.run(name?.trim() || null, id),
+    updateEmail,
+    changePhone,
+    setAvatar: (id, at) => q.setAvatar.run(at, id),
     giveConsent: (id) => q.setConsent.run(Date.now(), id),
     deleteUser: (id) => q.deleteUser.run(id),
     getUser: (id) => q.userById.get(id),

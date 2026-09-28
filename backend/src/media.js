@@ -38,4 +38,9 @@ function makeThumbnail(video, output) {
   return run(ffmpegPath, ['-y', '-ss', '1', '-i', video, '-frames:v', '1', '-vf', 'scale=360:-2', '-q:v', '4', output]);
 }
 
-module.exports = { probe, extractAudio, makeThumbnail };
+// Square 512px JPEG avatar (center crop), from any image ffmpeg can read.
+function makeAvatar(input, output) {
+  return run(ffmpegPath, ['-y', '-i', input, '-frames:v', '1', '-vf', "crop='min(iw,ih)':'min(iw,ih)',scale=512:512", '-q:v', '3', output]);
+}
+
+module.exports = { probe, extractAudio, makeThumbnail, makeAvatar };

@@ -19,7 +19,16 @@ export type Job = {
   videoUrl?: string;
   error?: string | null;
 };
-export type User = { id: string; phone: string | null; email: string | null; name: string | null; aiConsent: boolean; createdAt: number };
+export type User = {
+  id: string;
+  phone: string | null;
+  email: string | null;
+  name: string | null;
+  aiConsent: boolean;
+  createdAt: number;
+  avatarUrl: string | null;
+  providers: { phone: boolean; google: boolean; apple: boolean };
+};
 export type VideoItem = { id: string; title: string; duration: number; createdAt: number; width: number; height: number; videoUrl: string; thumbUrl: string };
 
 const PRODUCTION_API = 'https://backend-production-fc51.up.railway.app';
@@ -90,6 +99,13 @@ export const signInGoogle = (idToken: string) => request<Session>('/auth/google'
 
 export const getMe = () => request<{ user: User; videos: number }>('/me');
 export const updateName = (name: string) => request<{ user: User }>('/me', json('PATCH', { name }));
+export const updateProfile = (data: { name?: string; email?: string }) => request<{ user: User }>('/me', json('PATCH', data));
+export const startPhoneChange = (phone: string) => request<{ phone: string; devCode?: string }>('/me/phone/start', json('POST', { phone }));
+export const verifyPhoneChange = (phone: string, code: string) => request<{ user: User }>('/me/phone/verify', json('POST', { phone, code }));
+export const removeAvatar = () => request<{ user: User }>('/me/avatar', json('DELETE'));
+export async function uploadAvatar(uri: string, mimeType?: string): Promise<User> {
+  return (await upload('/me/avatar', uri, 'file', mimeType ?? 'image/jpeg')).user;
+}
 export const giveConsent = () => request<{ user: User }>('/me/consent', json('POST'));
 export const deleteAccount = () => request<{ ok: true }>('/me', json('DELETE'));
 export const listVideos = () => request<{ videos: VideoItem[] }>('/me/videos');

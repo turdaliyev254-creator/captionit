@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { deleteAccount, listVideos, mediaUrl, updateName, User, VideoItem } from '../api';
+import { deleteAccount, listVideos, mediaUrl, User, VideoItem } from '../api';
+import { Avatar } from '../ui/Avatar';
 import { openPrivacy, openTerms } from '../links';
 import { colors } from '../theme';
 import { BRAND_GRADIENT, GlassCard, GradientText } from '../ui/Gradient';
@@ -13,6 +14,7 @@ type Props = {
   onBack: () => void;
   onOpenVideo: (v: VideoItem) => void;
   onContact: () => void;
+  onEdit: () => void;
   onUserChange: (u: User) => void;
   onSignOut: () => void;
   onNewVideo: () => void;
@@ -21,11 +23,9 @@ type Props = {
 const fmtDuration = (s: number) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`;
 const fmtDate = (ms: number) => new Date(ms).toLocaleDateString('uz-UZ', { day: 'numeric', month: 'short' });
 
-export function ProfileScreen({ user, onBack, onOpenVideo, onContact, onUserChange, onSignOut, onNewVideo }: Props) {
+export function ProfileScreen({ user, onBack, onOpenVideo, onContact, onEdit, onUserChange, onSignOut, onNewVideo }: Props) {
   const [videos, setVideos] = useState<VideoItem[] | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [editingName, setEditingName] = useState(false);
-  const [name, setName] = useState(user.name ?? '');
 
   const load = useCallback(async () => {
     try {
@@ -39,16 +39,6 @@ export function ProfileScreen({ user, onBack, onOpenVideo, onContact, onUserChan
   useEffect(() => {
     load();
   }, [load]);
-
-  async function saveName() {
-    setEditingName(false);
-    if (name.trim() === (user.name ?? '')) return;
-    try {
-      onUserChange((await updateName(name.trim())).user);
-    } catch (e: any) {
-      Alert.alert('Xatolik', e?.message ?? String(e));
-    }
-  }
 
   function confirmDelete() {
     Alert.alert(
@@ -73,7 +63,6 @@ export function ProfileScreen({ user, onBack, onOpenVideo, onContact, onUserChan
   }
 
   const displayName = user.name || 'Foydalanuvchi';
-  const initials = displayName.split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase();
   // +998901234567 -> +998 90 123 45 67
   const phone = user.phone?.replace(/^\+998(\d{2})(\d{3})(\d{2})(\d{2})$/, '+998 $1 $2 $3 $4');
   const contactLine = phone ?? user.email ?? 'Apple akkaunt';
@@ -89,25 +78,23 @@ export function ProfileScreen({ user, onBack, onOpenVideo, onContact, onUserChan
       </View>
 
       <GlassCard style={s.profileCard} radius={24}>
-        <LinearGradient colors={BRAND_GRADIENT} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.avatar}>
-          <Text style={s.avatarText}>{initials}</Text>
-        </LinearGradient>
+        <Pressable onPress={onEdit}>
+          <Avatar user={user} size={58} />
+        </Pressable>
         <View style={{ flex: 1 }}>
-          {editingName ? (
-            <TextInput style={s.nameInput} value={name} onChangeText={setName} autoFocus onBlur={saveName} onSubmitEditing={saveName} placeholder="Ismingiz" placeholderTextColor={colors.muted} maxLength={60} />
-          ) : (
-            <Pressable onPress={() => setEditingName(true)} style={s.nameRow} hitSlop={6}>
-              <Text style={s.name} numberOfLines={1}>{displayName}</Text>
-              <Ionicons name="pencil" size={14} color={colors.muted} />
-            </Pressable>
-          )}
-          <Text style={s.contactLine}>{contactLine}</Text>
+          <Text style={s.name} numberOfLines={1}>{displayName}</Text>
+          <Text style={s.contactLine} numberOfLines={1}>{contactLine}</Text>
         </View>
         <View style={s.stat}>
           <GradientText style={s.statValue}>{String(videos?.length ?? '–')}</GradientText>
           <Text style={s.statLabel}>video</Text>
         </View>
       </GlassCard>
+
+      <Pressable onPress={onEdit} style={({ pressed }) => [s.editBtn, pressed && { opacity: 0.8 }]}>
+        <Ionicons name="create-outline" size={18} color="#fff" />
+        <Text style={s.editText}>Profilni tahrirlash</Text>
+      </Pressable>
 
       <Text style={s.section}>Mening videolarim</Text>
     </View>
@@ -117,6 +104,7 @@ export function ProfileScreen({ user, onBack, onOpenVideo, onContact, onUserChan
     <View style={{ marginTop: 10 }}>
       <Text style={s.section}>Sozlamalar</Text>
       <GlassCard radius={20}>
+        <Row icon="person-circle-outline" label="Profilni tahrirlash" onPress={onEdit} />
         <Row icon="chatbubbles-outline" label="Biz bilan bog‘lanish" onPress={onContact} />
         <Row icon="shield-checkmark-outline" label="Maxfiylik siyosati" onPress={openPrivacy} />
         <Row icon="document-text-outline" label="Foydalanish shartlari" onPress={openTerms} />
@@ -197,6 +185,11 @@ const s = StyleSheet.create({
   stat: { alignItems: 'center' },
   statValue: { fontFamily: 'Outfit_800ExtraBold', fontSize: 26, lineHeight: 30 },
   statLabel: { color: colors.muted, fontSize: 12 },
+  editBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 12, height: 46, borderRadius: 14,
+    backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border,
+  },
+  editText: { color: '#fff', fontWeight: '700', fontSize: 15 },
   section: { color: colors.text, fontFamily: 'Outfit_700Bold', fontSize: 17, marginTop: 22, marginBottom: 12 },
   card: { flex: 1, aspectRatio: 9 / 14, borderRadius: 18, overflow: 'hidden', backgroundColor: colors.surface, marginBottom: 12 },
   cardShade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '55%' },

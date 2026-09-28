@@ -5,7 +5,7 @@ const crypto = require('crypto');
 const express = require('express');
 const multer = require('multer');
 const cors = require('cors');
-const { probe, extractAudio, makeThumbnail } = require('./media');
+const { probe, extractAudio, makeThumbnail, makeAvatar } = require('./media');
 const { transcribe } = require('./transcribe');
 const heicConvert = require('heic-convert');
 const { renderCaptioned, getBundle } = require('./render');
@@ -114,7 +114,48 @@ app.get('/me', auth.requireUser, (req, res) => {
 
 app.patch('/me', auth.requireUser, (req, res) => {
   if (typeof req.body?.name === 'string') auth.updateName(req.user.id, req.body.name.slice(0, 60));
+  if (typeof req.body?.email === 'string') auth.updateEmail(req.user.id, req.body.email.slice(0, 120));
   res.json({ user: auth.publicUser(auth.getUser(req.user.id)) });
+});
+
+// Change phone: send a code to the new number, then confirm it.
+app.post('/me/phone/start', auth.requireUser, h(async (req, res) => res.json(await auth.startOtp(req.body?.phone))));
+app.post('/me/phone/verify', auth.requireUser, (req, res) => {
+  res.json({ user: auth.publicUser(auth.changePhone(req.user.id, req.body?.phone, req.body?.code)) });
+});
+
+const avatarDir = path.join(DATA_DIR, 'avatars');
+fs.mkdirSync(avatarDir, { recursive: true });
+const avatarUpload = multer({ dest: path.join(avatarDir, 'tmp'), limits: { fileSize: 25 * 1024 * 1024 } });
+
+app.post('/me/avatar', auth.requireUser, avatarUpload.single('file'), h(async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'file is required (field "file")' });
+  try {
+    let src = req.file.path;
+    if (/hei[cf]/i.test(req.file.mimetype) || /\.hei[cf]$/i.test(req.file.originalname)) {
+      const output = await heicConvert({ buffer: fs.readFileSync(src), format: 'JPEG', quality: 0.9 });
+      src = `${req.file.path}.jpg`;
+      fs.writeFileSync(src, Buffer.from(output));
+    }
+    await makeAvatar(src, path.join(avatarDir, `${req.user.id}.jpg`));
+    if (src !== req.file.path) fs.rmSync(src, { force: true });
+  } finally {
+    fs.rmSync(req.file.path, { force: true });
+  }
+  auth.setAvatar(req.user.id, Date.now());
+  res.json({ user: auth.publicUser(auth.getUser(req.user.id)) });
+}));
+
+app.delete('/me/avatar', auth.requireUser, (req, res) => {
+  fs.rmSync(path.join(avatarDir, `${req.user.id}.jpg`), { force: true });
+  auth.setAvatar(req.user.id, null);
+  res.json({ user: auth.publicUser(auth.getUser(req.user.id)) });
+});
+
+app.get('/me/avatar', auth.requireUser, (req, res) => {
+  const file = path.join(avatarDir, `${req.user.id}.jpg`);
+  if (!fs.existsSync(file)) return res.status(404).json({ error: 'no avatar' });
+  res.sendFile(file);
 });
 
 // Explicit permission to send audio to the third-party AI (App Store guideline 5.1.2(i)).
@@ -126,6 +167,7 @@ app.post('/me/consent', auth.requireUser, (req, res) => {
 // In-app account deletion (App Store guideline 5.1.1(v)): user row and all their files.
 app.delete('/me', auth.requireUser, (req, res) => {
   for (const job of [...jobs.values()]) if (job.userId === req.user.id) removeJob(job);
+  fs.rmSync(path.join(avatarDir, `${req.user.id}.jpg`), { force: true });
   auth.deleteUser(req.user.id);
   res.json({ ok: true });
 });

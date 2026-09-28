@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,6 +8,7 @@ import type { User } from '../api';
 import { getStyle } from '../../../shared/styles';
 import { CaptionOverlay } from '../captions/CaptionOverlay';
 import { useLoopClock } from '../captions/usePlayerTime';
+import { Avatar } from '../ui/Avatar';
 import { BRAND_GRADIENT, GlassButton, GlassCard, GradientButton, GradientText } from '../ui/Gradient';
 
 export type PickedVideo = { uri: string; mimeType?: string };
@@ -42,10 +43,23 @@ type Props = { user: User; onPicked: (video: PickedVideo, language: string) => v
 
 export function HomeScreen({ user, onPicked, onProfile }: Props) {
   const [language, setLanguage] = useState('uz');
+  // True from the tap until the picked video is handed over: iOS may spend several seconds
+  // compressing the video after the picker closes, and repeated taps would start duplicate uploads.
+  const [picking, setPicking] = useState(false);
   const [cardW, setCardW] = useState(0);
   const time = useLoopClock(3.4);
 
   async function pick(fromCamera: boolean) {
+    if (picking) return;
+    setPicking(true);
+    try {
+      await pickInner(fromCamera);
+    } finally {
+      setPicking(false);
+    }
+  }
+
+  async function pickInner(fromCamera: boolean) {
     const options: ImagePicker.ImagePickerOptions = {
       mediaTypes: ['videos'],
       quality: 1,
@@ -74,9 +88,7 @@ export function HomeScreen({ user, onPicked, onProfile }: Props) {
         <Text style={s.brand}>Captionit</Text>
         <View style={{ flex: 1 }} />
         <Pressable onPress={onProfile} hitSlop={8} style={s.avatarBtn}>
-          <LinearGradient colors={BRAND_GRADIENT} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.avatar}>
-            <Text style={s.avatarText}>{(user.name || 'U').slice(0, 1).toUpperCase()}</Text>
-          </LinearGradient>
+          <Avatar user={user} size={36} />
         </Pressable>
       </View>
 
@@ -130,6 +142,16 @@ export function HomeScreen({ user, onPicked, onProfile }: Props) {
         <GradientButton title="Video tanlash" icon={<Ionicons name="images" size={20} color="#fff" />} onPress={() => pick(false)} />
         <GlassButton title="Kamerada yozish" icon={<Ionicons name="videocam" size={20} color="#fff" />} onPress={() => pick(true)} />
       </View>
+
+      {picking && (
+        <View style={s.pickingOverlay}>
+          <GlassCard style={s.pickingCard} radius={22}>
+            <ActivityIndicator color="#fff" size="large" />
+            <Text style={s.pickingTitle}>Video tayyorlanmoqda…</Text>
+            <Text style={s.pickingSub}>iPhone videoni siqyapti, bir necha soniya kuting</Text>
+          </GlassCard>
+        </View>
+      )}
     </View>
   );
 }
@@ -163,4 +185,11 @@ const s = StyleSheet.create({
   segmentText: { color: 'rgba(255,255,255,0.7)', fontWeight: '700', fontSize: 14 },
   segmentTextActive: { color: '#fff' },
   actions: { gap: 12 },
+  pickingOverlay: {
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.55)',
+    alignItems: 'center', justifyContent: 'center', padding: 30,
+  },
+  pickingCard: { alignItems: 'center', gap: 12, paddingVertical: 28, paddingHorizontal: 24, alignSelf: 'stretch' },
+  pickingTitle: { color: '#fff', fontFamily: 'Outfit_700Bold', fontSize: 19 },
+  pickingSub: { color: 'rgba(255,255,255,0.7)', textAlign: 'center' },
 });
