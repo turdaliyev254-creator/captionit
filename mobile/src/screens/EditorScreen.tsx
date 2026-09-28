@@ -6,6 +6,9 @@ import { useEvent } from 'expo';
 import { useVideoPlayer, VideoPlayer, VideoView } from 'expo-video';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
+import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
+import { BRAND_GRADIENT } from '../ui/Gradient';
 import {
   CaptionStyle, newId, Phrase, resolveStyle, setPhraseText, StyleOverrides,
 } from '../../../shared/captions';
@@ -177,17 +180,22 @@ export function EditorScreen({ job, videoUri, session, setSession, onExport, onB
   return (
     <KeyboardAvoidingView style={s.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <View style={s.topBar}>
-        <Pressable onPress={onBack} hitSlop={12} style={s.iconBtn}>
-          <Ionicons name="close" size={24} color={colors.text} />
+        <Pressable onPress={onBack} hitSlop={12} style={s.roundBtn}>
+          <Ionicons name="close" size={22} color={colors.text} />
         </Pressable>
-        <Pressable onPress={() => { player.pause(); onExport(); }} style={s.exportBtn}>
-          <Text style={s.exportText}>Eksport</Text>
+        <Text style={s.title}>Tahrirlash</Text>
+        <Pressable onPress={() => { player.pause(); onExport(); }} style={({ pressed }) => [s.exportWrap, pressed && { opacity: 0.85 }]}>
+          <LinearGradient colors={BRAND_GRADIENT} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={s.exportBtn}>
+            <Ionicons name="arrow-up-circle" size={18} color="#fff" />
+            <Text style={s.exportText}>Eksport</Text>
+          </LinearGradient>
         </Pressable>
       </View>
 
       <View style={s.preview} onLayout={(e: LayoutChangeEvent) => setBox({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}>
         {frame.w > 0 && (
-          <View style={{ width: frame.w, height: frame.h, borderRadius: 12, overflow: 'hidden' }} {...pan.panHandlers}>
+          <View style={[s.frameGlow, { width: frame.w, height: frame.h }]}>
+          <View style={{ width: frame.w, height: frame.h, borderRadius: 18, overflow: 'hidden' }} {...pan.panHandlers}>
             <VideoView player={player} style={StyleSheet.absoluteFill} contentFit="contain" nativeControls={false} />
             <OverlaysLayer
               player={player}
@@ -202,16 +210,22 @@ export function EditorScreen({ job, videoUri, session, setSession, onExport, onB
             <LiveCaptions player={player} phrases={phrases} style={style} width={frame.w} height={frame.h} />
             {!isPlaying && (
               <View style={s.playOverlay} pointerEvents="none">
-                <Ionicons name="play" size={44} color="rgba(255,255,255,0.9)" />
+                <View style={s.bigPlay}>
+                  <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
+                  <Ionicons name="play" size={30} color="#fff" style={{ marginLeft: 4 }} />
+                </View>
               </View>
             )}
+          </View>
           </View>
         )}
       </View>
 
       <View style={s.transport}>
-        <Pressable onPress={() => (isPlaying ? player.pause() : player.play())} style={s.iconBtn}>
-          <Ionicons name={isPlaying ? 'pause' : 'play'} size={22} color={colors.text} />
+        <Pressable onPress={() => (isPlaying ? player.pause() : player.play())} style={s.playBtnWrap}>
+          <LinearGradient colors={BRAND_GRADIENT} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.playBtn}>
+            <Ionicons name={isPlaying ? 'pause' : 'play'} size={20} color="#fff" style={isPlaying ? undefined : { marginLeft: 2 }} />
+          </LinearGradient>
         </Pressable>
         <TimeLabel player={player} duration={trim.end - trim.start} offset={trim.start} />
       </View>
@@ -232,6 +246,9 @@ export function EditorScreen({ job, videoUri, session, setSession, onExport, onB
       />
 
       <View style={s.sheet}>
+        <BlurView intensity={50} tint="dark" style={StyleSheet.absoluteFill} />
+        <LinearGradient colors={['rgba(255,255,255,0.10)', 'rgba(255,255,255,0.02)']} style={StyleSheet.absoluteFill} />
+        <View style={s.handle} />
         {(
           <ScrollView style={s.panel} contentContainerStyle={{ paddingVertical: 14 }} keyboardShouldPersistTaps="handled">
             {tab === 'style' && (
@@ -284,7 +301,12 @@ export function EditorScreen({ job, videoUri, session, setSession, onExport, onB
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.toolbarScroll} contentContainerStyle={s.toolbar}>
           {TABS.map((t) => (
             <Pressable key={t.id} onPress={() => setTab(t.id)} style={s.tool}>
-              <Ionicons name={t.icon} size={22} color={tab === t.id ? colors.text : colors.muted} />
+              <View style={s.toolIcon}>
+                {tab === t.id && (
+                  <LinearGradient colors={BRAND_GRADIENT} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[StyleSheet.absoluteFill, { borderRadius: 12 }]} />
+                )}
+                <Ionicons name={t.icon} size={20} color={tab === t.id ? '#fff' : colors.muted} />
+              </View>
               <Text style={[s.toolText, tab === t.id && { color: colors.text }]}>{t.label}</Text>
             </Pressable>
           ))}
@@ -312,15 +334,31 @@ function TimeLabel({ player, duration, offset }: { player: VideoPlayer; duration
 const s = StyleSheet.create({
   container: { flex: 1 },
   topBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 6 },
-  iconBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' },
-  exportBtn: { backgroundColor: colors.accent, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 12 },
-  exportText: { color: colors.text, fontWeight: '800', fontSize: 15 },
+  roundBtn: {
+    width: 40, height: 40, borderRadius: 20, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  title: { color: colors.text, fontFamily: 'Outfit_700Bold', fontSize: 17 },
+  exportWrap: { borderRadius: 999, shadowColor: '#FF3D9A', shadowOpacity: 0.5, shadowRadius: 12, shadowOffset: { width: 0, height: 4 } },
+  exportBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 999 },
+  exportText: { color: '#fff', fontWeight: '800', fontSize: 15 },
+  frameGlow: {
+    borderRadius: 18, shadowColor: '#8B5CFF', shadowOpacity: 0.45, shadowRadius: 24, shadowOffset: { width: 0, height: 8 },
+  },
+  bigPlay: {
+    width: 64, height: 64, borderRadius: 32, overflow: 'hidden', alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.35)',
+  },
+  playBtnWrap: { borderRadius: 20, shadowColor: '#FF3D9A', shadowOpacity: 0.4, shadowRadius: 10, shadowOffset: { width: 0, height: 3 } },
+  playBtn: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  handle: { alignSelf: 'center', width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.25)', marginTop: 8 },
+  toolIcon: { width: 40, height: 32, borderRadius: 12, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   preview: { flex: 1, alignItems: 'center', justifyContent: 'center', marginHorizontal: 16 },
   playOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' },
   transport: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingTop: 6 },
   time: { color: colors.text, fontVariant: ['tabular-nums'], fontWeight: '600' },
-  sheet: { backgroundColor: '#111117', borderTopLeftRadius: 20, borderTopRightRadius: 20, borderTopWidth: 1, borderColor: colors.border },
-  panel: { height: 220 },
+  sheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, borderTopWidth: 1, borderColor: colors.border, overflow: 'hidden' },
+  panel: { height: 210 },
   toolbarScroll: { borderTopWidth: 1, borderColor: colors.border, flexGrow: 0 },
   toolbar: { paddingHorizontal: 8, paddingTop: 6, paddingBottom: 4, gap: 4 },
   tool: { alignItems: 'center', gap: 3, paddingHorizontal: 10, paddingVertical: 4, minWidth: 62 },

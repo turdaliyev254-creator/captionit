@@ -1,10 +1,12 @@
 export const colors = {
   bg: '#0B0B0F',
-  surface: '#17171F',
-  surfaceHigh: '#22222D',
-  border: '#2E2E3A',
+  // Translucent surfaces so the gradient backdrop glows through panels.
+  surface: 'rgba(255,255,255,0.07)',
+  surfaceHigh: 'rgba(255,255,255,0.12)',
+  border: 'rgba(255,255,255,0.12)',
   text: '#F5F5F7',
-  muted: '#9A9AAB',
-  accent: '#7C5CFF',
+  muted: 'rgba(255,255,255,0.6)',
+  accent: '#FF5FA2',
+  accentSoft: 'rgba(255,61,154,0.18)',
   danger: '#FF5C7A',
 };

@@ -1,5 +1,7 @@
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { colors } from './theme';
+import { BRAND_GRADIENT } from './ui/Gradient';
 
 export function Button({
   title, onPress, variant = 'primary', disabled,
@@ -14,6 +16,9 @@ export function Button({
         (pressed || disabled) && { opacity: 0.6 },
       ]}
     >
+      {variant === 'primary' && (
+        <LinearGradient colors={BRAND_GRADIENT} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={StyleSheet.absoluteFill} />
+      )}
       <Text style={styles.buttonText}>{title}</Text>
     </Pressable>
   );
@@ -22,6 +27,9 @@ export function Button({
 export function Chip({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
   return (
     <Pressable onPress={onPress} style={[styles.chip, active && styles.chipActive]}>
+      {active && (
+        <LinearGradient colors={BRAND_GRADIENT} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={StyleSheet.absoluteFill} />
+      )}
       <Text style={[styles.chipText, active && { color: colors.text }]}>{label}</Text>
     </Pressable>
   );
@@ -39,10 +47,10 @@ export function Loading({ title, subtitle }: { title: string; subtitle?: string 
 
 const styles = StyleSheet.create({
   button: {
-    backgroundColor: colors.accent,
     paddingVertical: 16,
-    borderRadius: 14,
+    borderRadius: 16,
     alignItems: 'center',
+    overflow: 'hidden',
   },
   secondary: { backgroundColor: colors.surfaceHigh },
   buttonText: { color: colors.text, fontSize: 16, fontWeight: '700' },
@@ -53,8 +61,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
+    overflow: 'hidden',
   },
-  chipActive: { borderColor: colors.accent, backgroundColor: '#2A2150' },
+  chipActive: { borderColor: 'transparent' },
   chipText: { color: colors.muted, fontWeight: '600' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 14, padding: 24 },
   loadingTitle: { color: colors.text, fontSize: 18, fontWeight: '700' },

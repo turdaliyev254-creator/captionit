@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, LayoutChangeEvent, PanResponder, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import type { VideoPlayer, VideoThumbnail } from 'expo-video';
 import type { Phrase } from '../../../shared/captions';
 import type { Overlay, Trim } from '../../../shared/overlays';
@@ -102,8 +103,9 @@ export function Timeline({ player, duration, trim, phrases, overlays, selectedOv
               <Pressable
                 key={p.id}
                 onPress={() => onSelectPhrase(p.id)}
-                style={[s.block, s.captionBlock, { left: p.start * PX_PER_SEC, width: Math.max(8, (p.end - p.start) * PX_PER_SEC - 2) }]}
+                style={[s.block, { left: p.start * PX_PER_SEC, width: Math.max(8, (p.end - p.start) * PX_PER_SEC - 2) }]}
               >
+                <LinearGradient colors={['#8B5CFF', '#C24DDB']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={StyleSheet.absoluteFill} />
                 <Text numberOfLines={1} style={s.blockText}>{p.words.map((w) => w.word).join(' ')}</Text>
               </Pressable>
             ))}
@@ -116,11 +118,12 @@ export function Timeline({ player, duration, trim, phrases, overlays, selectedOv
                 key={o.id}
                 onPress={() => onSelectOverlay(o.id)}
                 style={[
-                  s.block, s.overlayBlock,
+                  s.block,
                   selectedOverlay === o.id && s.overlayBlockActive,
                   { left: o.start * PX_PER_SEC, width: Math.max(8, (o.end - o.start) * PX_PER_SEC - 2) },
                 ]}
               >
+                <LinearGradient colors={['#FF8A3D', '#FF3D9A']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={StyleSheet.absoluteFill} />
                 <Text numberOfLines={1} style={s.blockText}>
                   {o.type === 'image' ? '🖼 Rasm' : '🎬 Video'}
                 </Text>
@@ -130,20 +133,23 @@ export function Timeline({ player, duration, trim, phrases, overlays, selectedOv
         </Animated.View>
       )}
       <View pointerEvents="none" style={[s.playhead, { left: side - 1 }]} />
+      <View pointerEvents="none" style={[s.knob, { left: side - 6 }]} />
     </View>
   );
 }
 
 const s = StyleSheet.create({
   wrap: { height: 108, overflow: 'hidden' },
-  strip: { height: 48, flexDirection: 'row', borderRadius: 8, overflow: 'hidden', backgroundColor: colors.surface },
+  strip: { height: 48, flexDirection: 'row', borderRadius: 12, overflow: 'hidden', backgroundColor: colors.surface },
   cut: { position: 'absolute', top: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.65)' },
-  trimFrame: { position: 'absolute', top: 0, bottom: 0, borderWidth: 2, borderColor: '#FFD60A', borderRadius: 8 },
+  trimFrame: { position: 'absolute', top: 0, bottom: 0, borderWidth: 2.5, borderColor: '#FFD60A', borderRadius: 12 },
   track: { height: 22, marginTop: 5 },
-  block: { position: 'absolute', top: 0, bottom: 0, borderRadius: 6, paddingHorizontal: 6, justifyContent: 'center' },
-  captionBlock: { backgroundColor: '#3A2C7A' },
-  overlayBlock: { backgroundColor: '#1F4E5F' },
-  overlayBlockActive: { borderWidth: 1.5, borderColor: '#7FE3FF' },
+  block: { position: 'absolute', top: 0, bottom: 0, borderRadius: 7, paddingHorizontal: 7, justifyContent: 'center', overflow: 'hidden' },
+  overlayBlockActive: { borderWidth: 2, borderColor: '#fff' },
   blockText: { color: colors.text, fontSize: 11, fontWeight: '600' },
-  playhead: { position: 'absolute', top: 2, bottom: 2, width: 2, borderRadius: 1, backgroundColor: '#fff' },
+  playhead: {
+    position: 'absolute', top: 2, bottom: 2, width: 2, borderRadius: 1, backgroundColor: '#fff',
+    shadowColor: '#fff', shadowOpacity: 0.8, shadowRadius: 4, shadowOffset: { width: 0, height: 0 },
+  },
+  knob: { position: 'absolute', top: 0, width: 12, height: 12, borderRadius: 6, backgroundColor: '#fff' },
 });

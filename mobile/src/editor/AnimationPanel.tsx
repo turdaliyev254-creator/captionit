@@ -20,6 +20,6 @@ const s = StyleSheet.create({
     width: '31.5%', paddingVertical: 14, borderRadius: 12, backgroundColor: colors.surface,
     alignItems: 'center', borderWidth: 2, borderColor: 'transparent',
   },
-  itemActive: { borderColor: colors.accent, backgroundColor: '#2A2150' },
+  itemActive: { borderColor: colors.accent, backgroundColor: colors.accentSoft },
   text: { color: colors.muted, fontWeight: '700' },
 });

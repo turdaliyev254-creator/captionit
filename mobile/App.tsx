@@ -87,8 +87,8 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <View style={styles.root}>
-      {/* Bright gradient backdrop everywhere except the editor/result, where the video is the focus. */}
-      {step.name !== 'editor' && step.name !== 'result' && <GradientBackground intensity={step.name === 'home' ? 1 : 0.6} />}
+      {/* Gradient backdrop; dimmer in the editor/result so the video stays the focus. */}
+      <GradientBackground intensity={step.name === 'home' ? 1 : step.name === 'editor' || step.name === 'result' ? 0.35 : 0.6} />
       <SafeAreaView style={styles.safe}>
         <StatusBar style="light" />
         {step.name === 'home' && <HomeScreen onPicked={handlePicked} />}
