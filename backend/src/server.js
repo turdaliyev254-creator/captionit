@@ -7,6 +7,7 @@ const multer = require('multer');
 const cors = require('cors');
 const { probe, extractAudio } = require('./media');
 const { transcribe } = require('./transcribe');
+const heicConvert = require('heic-convert');
 const { renderCaptioned, getBundle } = require('./render');
 
 const PORT = Number(process.env.PORT || 4000);
@@ -110,9 +111,36 @@ app.get('/jobs/:id/input', (req, res) => {
   res.sendFile(job.input);
 });
 
-app.post('/jobs/:id/assets', assetUpload.single('file'), (req, res) => {
+async function toJpeg(file) {
+  const jpg = file.replace(/\.hei[cf]$/i, '.jpg');
+  if (!fs.existsSync(jpg)) {
+    const output = await heicConvert({ buffer: fs.readFileSync(file), format: 'JPEG', quality: 0.9 });
+    fs.writeFileSync(jpg, Buffer.from(output));
+  }
+  return jpg;
+}
+
+// Overlays added before HEIC conversion existed may still point at a .heic file.
+async function ensureDrawable(job, src) {
+  if (!/\.hei[cf]$/i.test(src)) return src;
+  const file = path.join(job.dir, 'assets', path.basename(src));
+  if (!fs.existsSync(file)) return src;
+  return src.replace(/[^/]+$/, path.basename(await toJpeg(file)));
+}
+
+app.post('/jobs/:id/assets', assetUpload.single('file'), async (req, res, next) => {
   if (!req.file) return res.status(400).json({ error: 'file is required (field "file")' });
-  res.status(201).json({ src: `/jobs/${req.params.id}/assets/${req.file.filename}` });
+  try {
+    let name = req.file.filename;
+    // iPhone photos may arrive as HEIC, which the export renderer (Chrome) can't draw.
+    if (/\.hei[cf]$/i.test(name)) {
+      name = path.basename(await toJpeg(req.file.path));
+      fs.rmSync(req.file.path);
+    }
+    res.status(201).json({ src: `/jobs/${req.params.id}/assets/${name}` });
+  } catch (err) {
+    next(err);
+  }
 });
 
 app.get('/jobs/:id/assets/:file', (req, res) => {
@@ -156,7 +184,7 @@ app.post('/jobs/:id/render', async (req, res) => {
         phrases,
         style,
         // Asset paths become absolute URLs the renderer can fetch.
-        overlays: overlays.map((o) => ({ ...o, src: o.src ? `http://localhost:${PORT}${o.src}` : undefined })),
+        overlays: await Promise.all(overlays.map(async (o) => ({ ...o, src: o.src ? `http://localhost:${PORT}${await ensureDrawable(job, o.src)}` : undefined }))),
       },
       onProgress: (p) => (job.progress = p),
     });

@@ -134,8 +134,9 @@ export function EditorScreen({ job, videoUri, session, setSession, onExport, onB
   }
 
   function addOverlay(o: Omit<Overlay, 'id' | 'start' | 'end' | 'x' | 'y' | 'rotation' | 'animation'> & { length: number }) {
-    const start = Math.min(player.currentTime, trim.end - 0.3);
     const { length, ...rest } = o;
+    // Near the end of the video, start earlier so the element still gets its full length.
+    const start = Math.max(trim.start, Math.min(player.currentTime, trim.end - length));
     const overlay: Overlay = {
       ...rest, id: newId(), start, end: Math.min(start + length, trim.end), x: 0.5, y: 0.35, rotation: 0, animation: 'pop',
     };
