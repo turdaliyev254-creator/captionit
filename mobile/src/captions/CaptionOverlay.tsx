@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -16,37 +16,84 @@ type Props = {
   scale?: number; // canvas-unit multiplier; defaults to width / 1080
 };
 
+function textStyle(style: CaptionStyle, k: number) {
+  const size = style.font.size * k;
+  return {
+    fontFamily: rnFont(style.font.family, style.font.weight, style.font.italic),
+    fontSize: size,
+    lineHeight: size * 1.18,
+    letterSpacing: style.font.letterSpacing * k,
+  };
+}
+
+// Yoga mis-sizes shrink-to-fit rows with flexWrap (the glass box ended up smaller than the text).
+// Instead, a hidden <Text> lays out the phrase and reports its lines; words are then placed in
+// explicit non-wrapping rows, so the container always hugs the text exactly.
+function useLines(words: WordFrame[], style: CaptionStyle, k: number, innerWidth: number) {
+  const [cache, setCache] = useState<Record<string, number[]>>({});
+  const text = words.map((w) => w.text).join(' ');
+  const key = `${text}|${style.font.family}|${style.font.weight}|${Math.round(style.font.size * k * 10)}|${Math.round(innerWidth)}`;
+  const counts = cache[key]; // number of words on each line
+
+  const measurer = counts ? null : (
+    <Text
+      style={[textStyle(style, k), { position: 'absolute', opacity: 0, width: innerWidth, textAlign: 'center' }]}
+      onTextLayout={(e) => {
+        const lineCounts = e.nativeEvent.lines.map((l) => l.text.trim().split(/\s+/).filter(Boolean).length);
+        setCache((c) => ({ ...c, [key]: lineCounts }));
+      }}
+    >
+      {text}
+    </Text>
+  );
+
+  let rows: WordFrame[][] | null = null;
+  if (counts) {
+    rows = [];
+    let i = 0;
+    for (const n of counts) {
+      if (n > 0) rows.push(words.slice(i, i + n));
+      i += n;
+    }
+    if (i < words.length) rows.push(words.slice(i)); // safety: never drop words
+  }
+  return { rows, measurer };
+}
+
 // React Native twin of backend/renderer/CaptionLayer.tsx — keep the two in sync.
 export const CaptionOverlay = memo(function CaptionOverlay({ phrases, style, time, width, height, scale }: Props) {
   const f = framePhrase(phrases, style, time);
-  if (!f) return null;
   const k = scale ?? width / 1080;
   const c = style.container;
-
   const padX = c.type === 'none' ? 0 : c.padX * k;
   const padY = c.type === 'none' ? 0 : c.padY * k;
+  const { rows, measurer } = useLines(f?.words ?? [], style, k, style.maxWidth * width - padX * 2);
+  if (!f) return null;
 
   return (
     <View pointerEvents="none" style={[StyleSheet.absoluteFill, { overflow: 'hidden' }]}>
       {/* A full-height band centred on the caption's y line; the block is centred inside it. */}
       <View style={[s.band, { top: style.y * height - height, height: height * 2 }]}>
-        <View
-          style={{
-            maxWidth: style.maxWidth * width,
-            paddingHorizontal: padX,
-            paddingVertical: padY,
-            opacity: f.container.opacity,
-            transform: [{ scale: f.container.scale }],
-          }}
-        >
-          {/* Background is a sibling of the word row, never part of its wrapping layout. */}
-          {c.type !== 'none' && <ContainerBackground style={style} k={k} />}
-          <View style={s.words}>
-            {f.words.map((w) => (
-              <CaptionWord key={`${f.phrase.id}-${w.index}`} w={w} style={style} k={k} />
+        {measurer}
+        {rows && (
+          <View
+            style={{
+              paddingHorizontal: padX,
+              paddingVertical: padY,
+              opacity: f.container.opacity,
+              transform: [{ scale: f.container.scale }],
+            }}
+          >
+            {c.type !== 'none' && <ContainerBackground style={style} k={k} />}
+            {rows.map((row, r) => (
+              <View key={r} style={s.row}>
+                {row.map((w) => (
+                  <CaptionWord key={`${f.phrase.id}-${w.index}`} w={w} style={style} k={k} />
+                ))}
+              </View>
             ))}
           </View>
-        </View>
+        )}
       </View>
     </View>
   );
@@ -89,12 +136,7 @@ function CaptionWord({ w, style, k }: { w: WordFrame; style: CaptionStyle; k: nu
   const a = w.anim;
   const size = style.font.size * k;
   const box = style.highlightMode === 'box';
-  const text = {
-    fontFamily: rnFont(style.font.family, style.font.weight, style.font.italic),
-    fontSize: size,
-    lineHeight: size * 1.18,
-    letterSpacing: style.font.letterSpacing * k,
-  };
+  const text = textStyle(style, k);
   const shadow = style.shadow && !(box && w.active)
     ? {
         textShadowColor: style.shadow.color,
@@ -137,6 +179,6 @@ function CaptionWord({ w, style, k }: { w: WordFrame; style: CaptionStyle; k: nu
 
 const s = StyleSheet.create({
   band: { position: 'absolute', left: 0, right: 0, alignItems: 'center', justifyContent: 'center' },
-  words: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'center', zIndex: 1 },
+  row: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', zIndex: 1 },
   strokeCopy: { position: 'absolute' },
 });

@@ -242,7 +242,8 @@ export function framePhrase(phrases: Phrase[], style: CaptionStyle, t: number): 
   const out: WordFrame[] = [];
   words.forEach((w, i) => {
     if (display === 'word' && i !== Math.max(activeIdx, 0)) return;
-    if (display === 'progressive' && i > activeIdx && !(i === 0 && activeIdx < 0)) return;
+    // Progressive words not yet spoken still take their place (invisible) so the layout doesn't jump.
+    const hidden = display === 'progressive' && i > activeIdx && !(i === 0 && activeIdx < 0);
 
     let appearAt: number;
     if (animation.scope === 'phrase') appearAt = phrase.start;
@@ -256,7 +257,7 @@ export function framePhrase(phrases: Phrase[], style: CaptionStyle, t: number): 
       text: style.font.uppercase ? w.word.toLocaleUpperCase('uz') : w.word,
       active,
       spoken: i <= activeIdx,
-      anim: animate(animation.type, progress, i),
+      anim: hidden ? { ...animate(animation.type, 0, i), opacity: 0 } : animate(animation.type, progress, i),
       highlight: active ? easeOutCubic(clamp01((t - w.start) / 0.12)) : 0,
     });
   });
