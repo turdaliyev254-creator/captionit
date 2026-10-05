@@ -2,7 +2,9 @@ import React from 'react';
 import { AbsoluteFill, Composition, OffthreadVideo } from 'remotion';
 import type { CaptionStyle, Phrase } from '../../shared/captions';
 import type { Overlay, Trim } from '../../shared/overlays';
+import type { TransitionSettings } from '../../shared/transitions';
 import { CaptionLayer } from './CaptionLayer';
+import { GlassLayer } from './GlassLayer';
 import { OverlayLayer } from './OverlayLayer';
 
 export type CaptionedProps = {
@@ -15,9 +17,11 @@ export type CaptionedProps = {
   phrases: Phrase[]; // on the trimmed timeline
   overlays: Overlay[]; // on the trimmed timeline
   style: CaptionStyle;
+  transition?: TransitionSettings;
+  sfx?: Record<string, string>; // sound file name -> URL
 };
 
-const Captioned: React.FC<CaptionedProps> = ({ videoSrc, fps, trim, phrases, overlays, style }) => (
+const Captioned: React.FC<CaptionedProps> = ({ videoSrc, fps, trim, phrases, overlays, style, transition, sfx }) => (
   <AbsoluteFill style={{ backgroundColor: 'black' }}>
     <OffthreadVideo
       src={videoSrc}
@@ -25,6 +29,7 @@ const Captioned: React.FC<CaptionedProps> = ({ videoSrc, fps, trim, phrases, ove
       trimAfter={trim ? Math.round(trim.end * fps) : undefined}
     />
     <OverlayLayer overlays={overlays ?? []} />
+    <GlassLayer videoSrc={videoSrc} trim={trim} phrases={phrases} transition={transition} sfx={sfx} />
     <CaptionLayer phrases={phrases} style={style} />
   </AbsoluteFill>
 );

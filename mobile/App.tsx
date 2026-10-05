@@ -5,6 +5,7 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { buildPhrases, resolveStyle } from '../shared/captions';
 import { shiftForTrim, shiftPhrasesForTrim } from '../shared/overlays';
 import { getStyle } from '../shared/styles';
+import { DEFAULT_TRANSITION } from '../shared/transitions';
 import {
   getMe, giveConsent, Job, loadToken, mediaUrl, renderJob, setToken, setUnauthorizedHandler, uploadVideo, User, VideoItem, waitForJob,
 } from './src/api';
@@ -94,6 +95,7 @@ export default function App() {
         overrides: {},
         trim: { start: 0, end: done.duration ?? 0 },
         overlays: [],
+        transition: DEFAULT_TRANSITION,
       });
       setStep({ name: 'editor' });
     } catch (e: any) {
@@ -127,6 +129,7 @@ export default function App() {
         trim,
         phrases: shiftPhrasesForTrim(session.phrases, trim),
         overlays: shiftForTrim(session.overlays, trim).map(({ uri, ...o }) => o),
+        transition: session.transition ?? DEFAULT_TRANSITION,
       });
       const done = await waitForJob(job.id, 'rendering', (j) => setStep({ name: 'rendering', progress: j.progress ?? 0 }));
       setStep({ name: 'result', videoUrl: mediaUrl(`${done.videoUrl}?t=${Date.now()}`) });

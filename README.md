@@ -49,9 +49,22 @@ Telefon va kompyuter bitta Wi‑Fi tarmog'ida bo'lishi kerak. Ilova backend manz
 |---|---|---|
 | `POST` | `/jobs` | Video yuklash (`video` fayl, `language`: `auto`/`uz`/`ru`/`en`) — transkripsiya boshlanadi |
 | `GET` | `/jobs/:id` | Holat: `transcribing` → `transcribed` → `rendering` → `done` |
-| `POST` | `/jobs/:id/render` | `{ style, position, words }` — subtitrni videoga yozish |
+| `POST` | `/jobs/:id/render` | `{ style, trim, phrases, overlays, transition }` — subtitrni videoga yozish; `transition = { mode: 'none' \| 'intro' \| 'sentences', sfx }` |
 | `GET` | `/jobs/:id/video` | Tayyor video |
 | `GET` | `/styles` | Subtitr stillari ro'yxati |
+
+## Shisha o'tish effekti (glass transition)
+
+Muharrirdagi **O'tish** bo'limida: *Yo'q* / *Boshida* / *Har gapda* (eng ko'pi bilan 3 soniyada bir marta) va whoosh ovozi.
+
+- Eksport: `backend/renderer/GlassLayer.tsx` — panel ostidagi video SVG filtr orqali sindiriladi
+  (qovurg'ali shisha, linza, rang ajralishi, yengil xiralik), chekka va yorug'lik chiziqlari CSS bilan.
+  Subtitrlar panel ustida qoladi.
+- Vaqtlar va ovozlar: `shared/transitions.ts` (ilova preview'i va eksport uchun umumiy).
+- Ilovadagi preview soddalashtirilgan (`mobile/src/editor/GlassPreview.tsx`); to'liq effekt va ovoz eksportda.
+- **Ovoz fayllari gitda yo'q** (Gilroy kabi alohida litsenziyali): `backend/sfx/` papkasiga
+  `slider_04.wav`, `whoosh_01.wav`, `whoosh_18.wav` nomlari bilan qo'ying. `railway up --no-gitignore`
+  ularni serverga yuklaydi. Fayl bo'lmasa, effekt ovozsiz ishlaydi.
 
 ## Keyingi qadamlar
 

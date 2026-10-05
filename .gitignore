@@ -4,3 +4,6 @@ node_modules/
 
 # Commercial font (licensed separately), keep out of git
 shared/fonts/gilroy/
+
+# Transition sounds (licensed separately), keep out of git; uploaded with `railway up --no-gitignore`
+backend/sfx/*.wav

@@ -12,7 +12,8 @@ import { BRAND_GRADIENT } from '../ui/Gradient';
 import {
   CaptionStyle, newId, Phrase, resolveStyle, setPhraseText, StyleOverrides,
 } from '../../../shared/captions';
-import type { Overlay, Trim } from '../../../shared/overlays';
+import { shiftPhrasesForTrim, type Overlay, type Trim } from '../../../shared/overlays';
+import { DEFAULT_TRANSITION, transitionTimes, TransitionSettings } from '../../../shared/transitions';
 import { getStyle } from '../../../shared/styles';
 import { Job, uploadAsset } from '../api';
 import { CaptionOverlay } from '../captions/CaptionOverlay';
@@ -21,9 +22,11 @@ import { AddPanel } from '../editor/AddPanel';
 import { AnimationPanel } from '../editor/AnimationPanel';
 import { ColorPanel } from '../editor/ColorPanel';
 import { FontPanel } from '../editor/FontPanel';
+import { GlassPreview } from '../editor/GlassPreview';
 import { OverlaysLayer } from '../editor/OverlaysLayer';
 import { StylePanel } from '../editor/StylePanel';
 import { TextPanel } from '../editor/TextPanel';
+import { TransitionPanel } from '../editor/TransitionPanel';
 import { Timeline } from '../editor/Timeline';
 import { TrimPanel } from '../editor/TrimPanel';
 import { colors } from '../theme';
@@ -34,9 +37,10 @@ export type EditorSession = {
   overrides: StyleOverrides;
   trim: Trim;
   overlays: Overlay[];
+  transition?: TransitionSettings;
 };
 
-type Tab = 'style' | 'text' | 'font' | 'color' | 'animation' | 'trim' | 'add';
+type Tab = 'style' | 'text' | 'font' | 'color' | 'animation' | 'transition' | 'trim' | 'add';
 const TABS: { id: Tab; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
   { id: 'style', label: 'Stil', icon: 'color-palette-outline' },
   { id: 'text', label: 'Matn', icon: 'text-outline' },
@@ -45,6 +49,7 @@ const TABS: { id: Tab; label: string; icon: keyof typeof Ionicons.glyphMap }[] =
   { id: 'font', label: 'Shrift', icon: 'text' },
   { id: 'color', label: 'Rang', icon: 'color-fill-outline' },
   { id: 'animation', label: 'Animatsiya', icon: 'sparkles-outline' },
+  { id: 'transition', label: "O'tish", icon: 'swap-horizontal-outline' },
 ];
 
 type Props = {
@@ -63,7 +68,13 @@ export function EditorScreen({ job, videoUri, session, setSession, onExport, onB
   const [selectedOverlay, setSelectedOverlay] = useState<string | null>(null);
   const [box, setBox] = useState({ w: 0, h: 0 });
   const { phrases, styleId, overrides, trim, overlays } = session;
+  const transition = session.transition ?? DEFAULT_TRANSITION;
   const style = useMemo(() => resolveStyle(getStyle(styleId), overrides), [styleId, overrides]);
+  // Sweep times as the export computes them (trimmed timeline), moved back to source time.
+  const sweeps = useMemo(
+    () => transitionTimes(shiftPhrasesForTrim(phrases, trim), transition.mode, trim.end - trim.start).map((t) => t + trim.start),
+    [phrases, trim, transition.mode],
+  );
 
   const player = useVideoPlayer(videoUri, (p) => {
     p.loop = true;
@@ -207,6 +218,7 @@ export function EditorScreen({ job, videoUri, session, setSession, onExport, onB
               onSelect={selectOverlay}
               onChange={updateOverlay}
             />
+            {sweeps.length > 0 && <LiveGlass player={player} times={sweeps} width={frame.w} height={frame.h} />}
             <LiveCaptions player={player} phrases={phrases} style={style} width={frame.w} height={frame.h} />
             {!isPlaying && (
               <View style={s.playOverlay} pointerEvents="none">
@@ -295,6 +307,7 @@ export function EditorScreen({ job, videoUri, session, setSession, onExport, onB
               />
             )}
             {tab === 'animation' && <AnimationPanel value={style.animation.type} onPick={(animation) => override({ animation })} />}
+            {tab === 'transition' && <TransitionPanel value={transition} onChange={(t) => update({ transition: t })} />}
           </ScrollView>
         )}
 
@@ -320,6 +333,11 @@ export function EditorScreen({ job, videoUri, session, setSession, onExport, onB
 function LiveCaptions({ player, ...rest }: { player: VideoPlayer; phrases: Phrase[]; style: CaptionStyle; width: number; height: number }) {
   const time = usePlayerTime(player);
   return <CaptionOverlay {...rest} time={time} />;
+}
+
+function LiveGlass({ player, ...rest }: { player: VideoPlayer; times: number[]; width: number; height: number }) {
+  const time = usePlayerTime(player);
+  return <GlassPreview {...rest} time={time} />;
 }
 
 function TimeLabel({ player, duration, offset }: { player: VideoPlayer; duration: number; offset: number }) {

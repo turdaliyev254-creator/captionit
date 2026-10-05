@@ -3,6 +3,7 @@ import { File, UploadType } from 'expo-file-system';
 import * as SecureStore from 'expo-secure-store';
 import type { CaptionStyle, Phrase, Word } from '../../shared/captions';
 import type { Overlay, Trim } from '../../shared/overlays';
+import type { TransitionSettings } from '../../shared/transitions';
 
 export type JobStatus = 'transcribing' | 'transcribed' | 'rendering' | 'done' | 'error';
 export type Job = {
@@ -146,7 +147,10 @@ export async function uploadAsset(jobId: string, uri: string, mimeType?: string)
 export const getJob = (id: string) => request<Job>(`/jobs/${id}`);
 
 // phrases/overlays must already be on the trimmed timeline (see shared/overlays shiftForTrim).
-export function renderJob(id: string, opts: { phrases: Phrase[]; style: CaptionStyle; trim: Trim; overlays: Overlay[] }) {
+export function renderJob(
+  id: string,
+  opts: { phrases: Phrase[]; style: CaptionStyle; trim: Trim; overlays: Overlay[]; transition: TransitionSettings },
+) {
   return request<Job>(`/jobs/${id}/render`, json('POST', opts));
 }
 

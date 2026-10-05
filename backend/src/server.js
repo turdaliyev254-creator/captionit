@@ -12,6 +12,7 @@ const { renderCaptioned, getBundle } = require('./render');
 const { openDb } = require('./db');
 const { createAuth, HttpError } = require('./auth');
 const { mountLegal } = require('./legal');
+const { TRANSITION_MODES, SFX_FILES } = require('./transitions');
 
 const PORT = Number(process.env.PORT || 4000);
 const DATA_DIR = path.resolve(process.env.DATA_DIR || path.join(__dirname, '..', 'data'));
@@ -99,6 +100,15 @@ function mediaAccess(req, res, next) {
 }
 
 app.get('/health', (req, res) => res.json({ ok: true }));
+
+// Transition sounds (licensed separately, kept out of git) for the renderer only.
+const SFX_DIR = path.join(__dirname, '..', 'sfx');
+app.get('/sfx/:file', (req, res, next) => {
+  if (req.query.k !== INTERNAL_KEY) return next(new HttpError(404, 'Not found'));
+  const file = path.join(SFX_DIR, path.basename(req.params.file));
+  if (!fs.existsSync(file)) return next(new HttpError(404, 'Not found'));
+  res.sendFile(file);
+});
 
 // ---------- auth ----------
 
@@ -287,6 +297,10 @@ app.post('/jobs/:id/render', auth.requireUser, ownJob, async (req, res) => {
   };
   if (trim.end - trim.start < 0.5) return res.status(400).json({ error: 'trim is too short' });
   if (!Array.isArray(phrases) || !style?.font) return res.status(400).json({ error: 'phrases and style are required' });
+  const transition = {
+    mode: TRANSITION_MODES.includes(req.body?.transition?.mode) ? req.body.transition.mode : 'none',
+    sfx: req.body?.transition?.sfx !== false,
+  };
 
   Object.assign(job, { status: 'rendering', progress: 0, error: null });
   res.json(publicJob(job));
@@ -307,6 +321,9 @@ app.post('/jobs/:id/render', auth.requireUser, ownJob, async (req, res) => {
         phrases,
         style,
         overlays: await Promise.all(overlays.map(async (o) => ({ ...o, src: o.src ? internal(await ensureDrawable(job, o.src)) : undefined }))),
+        transition,
+        // Only sounds actually on this server; missing ones are skipped silently.
+        sfx: Object.fromEntries(SFX_FILES.filter((f) => fs.existsSync(path.join(SFX_DIR, f))).map((f) => [f, internal(`/sfx/${f}`)])),
       },
       onProgress: (p) => (job.progress = p),
     });
