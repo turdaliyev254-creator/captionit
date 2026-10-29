@@ -13,11 +13,12 @@ type Props = {
   onDelete: (id: string) => void;
   onAdd: () => void;
   onSeek: (t: number) => void;
+  normalize?: (text: string) => string; // e.g. new Uzbek alphabet for typed text
 };
 
 const fmt = (t: number) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}.${Math.floor((t % 1) * 10)}`;
 
-export function TextPanel({ phrases, player, onChangeText, onDelete, onAdd, onSeek }: Props) {
+export function TextPanel({ phrases, player, onChangeText, onDelete, onAdd, onSeek, normalize = (t) => t }: Props) {
   const currentId = activePhrase(phrases, usePlayerTime(player, 250))?.id ?? null;
   return (
     <View style={{ gap: 8, paddingHorizontal: 16 }}>
@@ -30,6 +31,7 @@ export function TextPanel({ phrases, player, onChangeText, onDelete, onAdd, onSe
           key={p.id}
           phrase={p}
           active={p.id === currentId}
+          normalize={normalize}
           onChangeText={(t) => onChangeText(p.id, t)}
           onDelete={() => onDelete(p.id)}
           onSeek={() => onSeek(p.start + 0.01)}
@@ -39,8 +41,9 @@ export function TextPanel({ phrases, player, onChangeText, onDelete, onAdd, onSe
   );
 }
 
-function PhraseRow({ phrase, active, onChangeText, onDelete, onSeek }: {
-  phrase: Phrase; active: boolean; onChangeText: (t: string) => void; onDelete: () => void; onSeek: () => void;
+function PhraseRow({ phrase, active, normalize, onChangeText, onDelete, onSeek }: {
+  phrase: Phrase; active: boolean; normalize: (t: string) => string;
+  onChangeText: (t: string) => void; onDelete: () => void; onSeek: () => void;
 }) {
   const initial = phrase.words.map((w) => w.word).join(' ');
   const [draft, setDraft] = useState(initial);
@@ -55,7 +58,11 @@ function PhraseRow({ phrase, active, onChangeText, onDelete, onSeek }: {
         value={draft}
         onChangeText={setDraft}
         onFocus={onSeek}
-        onEndEditing={() => draft !== initial && onChangeText(draft)}
+        onEndEditing={() => {
+          const text = normalize(draft);
+          setDraft(text);
+          if (text !== initial) onChangeText(text);
+        }}
         multiline
         blurOnSubmit
         returnKeyType="done"

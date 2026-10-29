@@ -66,6 +66,13 @@ Muharrirdagi **O'tish** bo'limida: *Yo'q* / *Boshida* / *Har gapda* (eng ko'pi b
   `slider_04.wav`, `whoosh_01.wav`, `whoosh_18.wav` nomlari bilan qo'ying. `railway up --no-gitignore`
   ularni serverga yuklaydi. Fayl bo'lmasa, effekt ovozsiz ishlaydi.
 
+## Yangi o'zbek alifbosi
+
+O'zbekcha subtitrlar avtomatik ravishda yangi lotin alifbosida yoziladi (O'RQ-1184): `o‘ → ö`, `g‘ → ğ`,
+`sh → ş`, `ch → ç`; tutuq belgisi (’) va `ng` o'zgarmaydi. Transkripsiyadan keyin serverda
+(`backend/src/alphabet.js`) va muharrirda qo'lda yozilgan matnda (`shared/alphabet.ts`) o'giriladi.
+Rus va ingliz tilidagi videolarga tegilmaydi. Shriftda ş/ğ bo'lmasa, eksportda Outfit shriftidan olinadi.
+
 ## Keyingi qadamlar
 
 - Keraksiz so'zlar va pauzalarni avtomatik kesish

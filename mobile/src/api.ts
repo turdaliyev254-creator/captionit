@@ -16,6 +16,8 @@ export type Job = {
   duration?: number;
   text?: string;
   title?: string;
+  language?: string; // requested: auto / uz / ru / en
+  detectedLanguage?: string;
   progress?: number;
   videoUrl?: string;
   error?: string | null;

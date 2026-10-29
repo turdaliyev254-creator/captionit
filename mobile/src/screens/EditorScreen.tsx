@@ -15,6 +15,7 @@ import {
 import { shiftPhrasesForTrim, type Overlay, type Trim } from '../../../shared/overlays';
 import { DEFAULT_TRANSITION, transitionTimes, TransitionSettings } from '../../../shared/transitions';
 import { getStyle } from '../../../shared/styles';
+import { isUzbek, toNewUzbekLatin } from '../../../shared/alphabet';
 import { Job, uploadAsset } from '../api';
 import { CaptionOverlay } from '../captions/CaptionOverlay';
 import { usePlayerTime } from '../captions/usePlayerTime';
@@ -69,6 +70,8 @@ export function EditorScreen({ job, videoUri, session, setSession, onExport, onB
   const [box, setBox] = useState({ w: 0, h: 0 });
   const { phrases, styleId, overrides, trim, overlays } = session;
   const transition = session.transition ?? DEFAULT_TRANSITION;
+  // Uzbek captions use the new Latin alphabet; text typed with o‘ / sh etc. is converted too.
+  const uzbek = isUzbek(job.detectedLanguage) || isUzbek(job.language);
   const style = useMemo(() => resolveStyle(getStyle(styleId), overrides), [styleId, overrides]);
   // Sweep times as the export computes them (trimmed timeline), moved back to source time.
   const sweeps = useMemo(
@@ -274,6 +277,7 @@ export function EditorScreen({ job, videoUri, session, setSession, onExport, onB
                 onDelete={(id) => update((s) => ({ phrases: s.phrases.filter((p) => p.id !== id) }))}
                 onAdd={addPhrase}
                 onSeek={(t) => { player.currentTime = t; }}
+                normalize={uzbek ? toNewUzbekLatin : undefined}
               />
             )}
             {tab === 'add' && (

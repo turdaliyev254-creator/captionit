@@ -85,7 +85,8 @@ export const CaptionLayer: React.FC<{ phrases: Phrase[]; style: CaptionStyle }> 
                   transform: `translate(${a.x * k}px, ${a.y * k}px) scale(${a.scale * wordScale(style, w)}) rotate(${a.rotate}deg)`,
                   filter: a.blur > 0.1 ? `blur(${a.blur * k}px)` : undefined,
                   color: wordColor(style, w),
-                  fontFamily: CSS_FONT[style.font.family],
+                  // Outfit fills in letters a font lacks (e.g. ş / ğ of the new Uzbek alphabet).
+                  fontFamily: `${CSS_FONT[style.font.family]}, ${CSS_FONT.Outfit}, sans-serif`,
                   fontWeight: style.font.weight,
                   fontStyle: style.font.italic ? 'italic' : 'normal',
                   fontSize: size,

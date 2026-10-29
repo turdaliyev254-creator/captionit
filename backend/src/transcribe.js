@@ -1,5 +1,6 @@
 const fs = require('fs');
 const OpenAI = require('openai');
+const { toNewUzbekLatin } = require('./alphabet');
 
 // Returns { text, language, words: [{ word, start, end }] } with timestamps in seconds.
 // ElevenLabs Scribe is preferred: it supports Uzbek (the OpenAI Whisper API rejects 'uz').
@@ -10,8 +11,9 @@ async function transcribe(audioFile, language) {
   else throw new Error('ELEVENLABS_API_KEY yoki OPENAI_API_KEY sozlanmagan (backend/.env)');
 
   if (language === 'uz' || /^uz/.test(result.language || '')) {
-    result.text = fixUzbekLatin(result.text || '');
-    result.words = result.words.map((w) => ({ ...w, word: fixUzbekLatin(w.word) }));
+    // Uzbek captions are always written in the new Latin alphabet (ö, ğ, ş, ç).
+    result.text = toNewUzbekLatin(fixUzbekLatin(result.text || ''));
+    result.words = result.words.map((w) => ({ ...w, word: toNewUzbekLatin(fixUzbekLatin(w.word)) }));
   }
   return result;
 }
